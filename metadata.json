@@ -1,0 +1,5 @@
+{
+  "name": "PDF Renovki",
+  "description": "A web dashboard to automatically add Renovki headers, footers, and watermarks to PDF files.",
+  "requestFramePermissions": []
+}
