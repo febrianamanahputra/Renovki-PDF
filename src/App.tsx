@@ -286,7 +286,8 @@ export default function App() {
         // Header
         const headerDims = embeddedHeader.scale(1);
         const headerScale = width / headerDims.width;
-        const scaledHeaderHeight = headerDims.height * headerScale;
+        // Mengurangi tinggi header sebesar 30% (dikali 0.7) agar lebih pendek
+        const scaledHeaderHeight = (headerDims.height * headerScale) * 0.7;
         page.drawImage(embeddedHeader, {
           x: 0,
           y: height - scaledHeaderHeight,
@@ -297,7 +298,8 @@ export default function App() {
         // Footer
         const footerDims = embeddedFooter.scale(1);
         const footerScale = width / footerDims.width;
-        const scaledFooterHeight = footerDims.height * footerScale;
+        // Mengurangi tinggi footer sebesar 30% (dikali 0.7) agar lebih pendek
+        const scaledFooterHeight = (footerDims.height * footerScale) * 0.7;
         page.drawImage(embeddedFooter, {
           x: 0,
           y: 0,
