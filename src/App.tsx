@@ -79,16 +79,16 @@ const generateLandscapeTemplate = (dataUrl: string, ratio: number): Promise<stri
         return;
       }
 
-      const leftW = (outW - 0.8 * img.width) / 2;
-      const midW = 0.8 * img.width;
+      const leftW = (outW - 0.98 * img.width) / 2;
+      const midW = 0.98 * img.width;
       const rightW = leftW;
 
-      // Draw left 10% stretched
-      ctx.drawImage(img, 0, 0, img.width * 0.1, img.height, 0, 0, leftW, img.height);
-      // Draw middle 80% normal
-      ctx.drawImage(img, img.width * 0.1, 0, img.width * 0.8, img.height, leftW, 0, midW, img.height);
-      // Draw right 10% stretched
-      ctx.drawImage(img, img.width * 0.9, 0, img.width * 0.1, img.height, leftW + midW, 0, rightW, img.height);
+      // Draw left 1% stretched
+      ctx.drawImage(img, 0, 0, img.width * 0.01, img.height, 0, 0, leftW, img.height);
+      // Draw middle 98% normal
+      ctx.drawImage(img, img.width * 0.01, 0, img.width * 0.98, img.height, leftW, 0, midW, img.height);
+      // Draw right 1% stretched
+      ctx.drawImage(img, img.width * 0.99, 0, img.width * 0.01, img.height, leftW + midW, 0, rightW, img.height);
 
       resolve(canvas.toDataURL('image/png'));
     };
