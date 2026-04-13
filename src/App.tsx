@@ -297,7 +297,9 @@ export default function App() {
               finalWidth = Math.max(visualWidth, visualHeight);
               finalHeight = Math.min(visualWidth, visualHeight);
               if (!isVisuallyLandscape) {
-                  additionalRotation = 90;
+                  additionalRotation = 270; // Diputar ke arah sebaliknya (-90 derajat) agar tidak terbalik saat diprint
+              } else {
+                  additionalRotation = 180; // Jika aslinya sudah landscape, kita putar 180 derajat juga
               }
           } else {
               finalWidth = Math.min(visualWidth, visualHeight);
