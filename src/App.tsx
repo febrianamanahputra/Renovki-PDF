@@ -83,7 +83,7 @@ export default function App() {
   const [weight, setWeight] = useState(() => localStorage.getItem('renovki_weight') || '');
 
   // App State
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedPdfUrl, setProcessedPdfUrl] = useState<string | null>(null);
   const [generatedFilename, setGeneratedFilename] = useState<string>('');
@@ -214,7 +214,7 @@ export default function App() {
       localStorage.removeItem('renovki_watermark');
       setTemplates(null);
       setProcessedPdfUrl(null);
-      setPdfFile(null);
+      setPdfFiles([]);
     }
   };
 
@@ -227,39 +227,50 @@ export default function App() {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.type !== 'application/pdf') {
-        setError('Please upload a valid PDF file.');
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+      if (files.length === 0) {
+        setError('Please upload valid PDF files.');
         return;
       }
-      setPdfFile(file);
-      await processPdf(file);
+      setPdfFiles(files);
+      await processPdfs(files);
     }
   };
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.type !== 'application/pdf') {
-        setError('Please upload a valid PDF file.');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+      if (files.length === 0) {
+        setError('Please upload valid PDF files.');
         return;
       }
-      setPdfFile(file);
-      await processPdf(file);
+      setPdfFiles(files);
+      await processPdfs(files);
     }
   };
 
-  const processPdf = async (file: File) => {
-    if (!templates) return;
+  const processPdfs = async (files: File[]) => {
+    if (!templates || files.length === 0) return;
     
     setIsProcessing(true);
     setError(null);
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      // Sort files naturally by filename (e.g., 1.pdf, 2.pdf, 10.pdf)
+      const sortedFiles = [...files].sort((a, b) => 
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      );
+
+      const mergedPdf = await PDFDocument.create();
+
+      for (const file of sortedFiles) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
 
       const fetchImage = async (dataUrl: string) => {
         const res = await fetch(dataUrl);
@@ -274,11 +285,11 @@ export default function App() {
       const isFooterPng = templates.footer.startsWith('data:image/png');
       const isWatermarkPng = templates.watermark.startsWith('data:image/png');
 
-      const embeddedHeader = isHeaderPng ? await pdfDoc.embedPng(headerBytes) : await pdfDoc.embedJpg(headerBytes);
-      const embeddedFooter = isFooterPng ? await pdfDoc.embedPng(footerBytes) : await pdfDoc.embedJpg(footerBytes);
-      const embeddedWatermark = isWatermarkPng ? await pdfDoc.embedPng(watermarkBytes) : await pdfDoc.embedJpg(watermarkBytes);
+      const embeddedHeader = isHeaderPng ? await mergedPdf.embedPng(headerBytes) : await mergedPdf.embedJpg(headerBytes);
+      const embeddedFooter = isFooterPng ? await mergedPdf.embedPng(footerBytes) : await mergedPdf.embedJpg(footerBytes);
+      const embeddedWatermark = isWatermarkPng ? await mergedPdf.embedPng(watermarkBytes) : await mergedPdf.embedJpg(watermarkBytes);
 
-      const pages = pdfDoc.getPages();
+      const pages = mergedPdf.getPages();
 
       for (const page of pages) {
         const { width, height } = page.getSize();
@@ -286,8 +297,8 @@ export default function App() {
         // Header
         const headerDims = embeddedHeader.scale(1);
         const headerScale = width / headerDims.width;
-        // Mengurangi tinggi header sebesar 30% (dikali 0.7) agar lebih pendek
-        const scaledHeaderHeight = (headerDims.height * headerScale) * 0.7;
+        // Mengurangi tinggi header sebesar 20% (dikali 0.8) agar lebih pendek
+        const scaledHeaderHeight = (headerDims.height * headerScale) * 0.8;
         page.drawImage(embeddedHeader, {
           x: 0,
           y: height - scaledHeaderHeight,
@@ -298,8 +309,8 @@ export default function App() {
         // Footer
         const footerDims = embeddedFooter.scale(1);
         const footerScale = width / footerDims.width;
-        // Mengurangi tinggi footer sebesar 30% (dikali 0.7) agar lebih pendek
-        const scaledFooterHeight = (footerDims.height * footerScale) * 0.7;
+        // Mengurangi tinggi footer sebesar 20% (dikali 0.8) agar lebih pendek
+        const scaledFooterHeight = (footerDims.height * footerScale) * 0.8;
         page.drawImage(embeddedFooter, {
           x: 0,
           y: 0,
@@ -325,7 +336,7 @@ export default function App() {
         });
       }
 
-      const pdfBytes = await pdfDoc.save();
+      const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       
@@ -345,7 +356,7 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    if (processedPdfUrl && pdfFile) {
+    if (processedPdfUrl && pdfFiles.length > 0) {
       const a = document.createElement('a');
       a.href = processedPdfUrl;
       a.download = generatedFilename;
@@ -565,14 +576,15 @@ export default function App() {
                       onChange={handleFileChange}
                       accept="application/pdf"
                       className="hidden"
+                      multiple
                     />
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileUp className="w-8 h-8" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload PDF Document</h3>
-                    <p className="text-gray-500 mb-4">Drag and drop your PDF here, or click to browse</p>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload PDF Document(s)</h3>
+                    <p className="text-gray-500 mb-4">Drag and drop multiple PDFs here, or click to browse. Files will be merged automatically based on their names (e.g. 1.pdf, 2.pdf).</p>
                     <span className="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                      Select File
+                      Select Files
                     </span>
                   </div>
                 </div>
