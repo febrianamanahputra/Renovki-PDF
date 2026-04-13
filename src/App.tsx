@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PDFDocument, BlendMode } from 'pdf-lib';
+import { PDFDocument, BlendMode, degrees } from 'pdf-lib';
 import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2 } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 
@@ -265,31 +265,71 @@ export default function App() {
 
       const mergedPdf = await PDFDocument.create();
 
+      let globalPageIndex = 0;
+
       for (const file of sortedFiles) {
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await PDFDocument.load(arrayBuffer);
         const indices = pdfDoc.getPageIndices();
 
         for (const index of indices) {
+          globalPageIndex++;
+          // Halaman ke-2 selalu landscape, sisanya portrait
+          const isTargetLandscape = (globalPageIndex === 2);
+
           const page = pdfDoc.getPage(index);
           const angle = page.getRotation().angle;
 
-          // Jika halaman memiliki rotasi (misal hasil scan landscape yang terputar),
-          // kita normalkan halamannya agar header/footer tetap tergambar dengan benar.
-          if (angle === 0) {
-            const [copiedPage] = await mergedPdf.copyPages(pdfDoc, [index]);
-            mergedPdf.addPage(copiedPage);
+          const embeddedPage = await mergedPdf.embedPage(page);
+          const dims = embeddedPage.scale(1);
+
+          const isVisuallyLandscape = (angle === 90 || angle === 270) 
+              ? dims.height > dims.width 
+              : dims.width > dims.height;
+
+          const visualWidth = (angle === 90 || angle === 270) ? dims.height : dims.width;
+          const visualHeight = (angle === 90 || angle === 270) ? dims.width : dims.height;
+
+          let finalWidth, finalHeight;
+          let additionalRotation = 0;
+
+          if (isTargetLandscape) {
+              finalWidth = Math.max(visualWidth, visualHeight);
+              finalHeight = Math.min(visualWidth, visualHeight);
+              if (!isVisuallyLandscape) {
+                  additionalRotation = 90;
+              }
           } else {
-            const embeddedPage = await mergedPdf.embedPage(page);
-            const dims = embeddedPage.scale(1);
-            const newPage = mergedPdf.addPage([dims.width, dims.height]);
-            newPage.drawPage(embeddedPage, {
-              x: 0,
-              y: 0,
+              finalWidth = Math.min(visualWidth, visualHeight);
+              finalHeight = Math.max(visualWidth, visualHeight);
+              if (isVisuallyLandscape) {
+                  additionalRotation = -90;
+              }
+          }
+
+          const totalRotation = angle + additionalRotation;
+          const normalizedRotation = ((totalRotation % 360) + 360) % 360;
+
+          const newPage = mergedPdf.addPage([finalWidth, finalHeight]);
+          
+          let tx = 0, ty = 0;
+          if (normalizedRotation === 0) {
+              tx = 0; ty = 0;
+          } else if (normalizedRotation === 90) {
+              tx = finalWidth; ty = 0;
+          } else if (normalizedRotation === 180) {
+              tx = finalWidth; ty = finalHeight;
+          } else if (normalizedRotation === 270) {
+              tx = 0; ty = finalHeight;
+          }
+
+          newPage.drawPage(embeddedPage, {
+              x: tx,
+              y: ty,
               width: dims.width,
               height: dims.height,
-            });
-          }
+              rotate: degrees(normalizedRotation)
+          });
         }
       }
 
