@@ -356,10 +356,13 @@ export default function App() {
 
       for (const page of pages) {
         const { width, height } = page.getSize();
+        
+        // Gunakan lebar portrait (sisi terpendek) untuk menghitung tinggi agar konsisten (slim) di semua orientasi
+        const portraitWidth = Math.min(width, height);
 
         // Header
         const headerDims = embeddedHeader.scale(1);
-        const headerScale = width / headerDims.width;
+        const headerScale = portraitWidth / headerDims.width;
         // Mengurangi tinggi header sebesar 20% (dikali 0.8) agar lebih pendek
         const scaledHeaderHeight = (headerDims.height * headerScale) * 0.8;
         page.drawImage(embeddedHeader, {
@@ -371,7 +374,7 @@ export default function App() {
 
         // Footer
         const footerDims = embeddedFooter.scale(1);
-        const footerScale = width / footerDims.width;
+        const footerScale = portraitWidth / footerDims.width;
         // Mengurangi tinggi footer sebesar 20% (dikali 0.8) agar lebih pendek
         const scaledFooterHeight = (footerDims.height * footerScale) * 0.8;
         page.drawImage(embeddedFooter, {
