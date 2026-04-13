@@ -268,8 +268,29 @@ export default function App() {
       for (const file of sortedFiles) {
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await PDFDocument.load(arrayBuffer);
-        const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
-        copiedPages.forEach((page) => mergedPdf.addPage(page));
+        const indices = pdfDoc.getPageIndices();
+
+        for (const index of indices) {
+          const page = pdfDoc.getPage(index);
+          const angle = page.getRotation().angle;
+
+          // Jika halaman memiliki rotasi (misal hasil scan landscape yang terputar),
+          // kita normalkan halamannya agar header/footer tetap tergambar dengan benar.
+          if (angle === 0) {
+            const [copiedPage] = await mergedPdf.copyPages(pdfDoc, [index]);
+            mergedPdf.addPage(copiedPage);
+          } else {
+            const embeddedPage = await mergedPdf.embedPage(page);
+            const dims = embeddedPage.scale(1);
+            const newPage = mergedPdf.addPage([dims.width, dims.height]);
+            newPage.drawPage(embeddedPage, {
+              x: 0,
+              y: 0,
+              width: dims.width,
+              height: dims.height,
+            });
+          }
+        }
       }
 
       const fetchImage = async (dataUrl: string) => {
