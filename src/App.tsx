@@ -65,6 +65,38 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+const generateLandscapeTemplate = (dataUrl: string, ratio: number): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const outW = img.width * ratio;
+      canvas.width = outW;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas not supported'));
+        return;
+      }
+
+      const leftW = (outW - 0.8 * img.width) / 2;
+      const midW = 0.8 * img.width;
+      const rightW = leftW;
+
+      // Draw left 10% stretched
+      ctx.drawImage(img, 0, 0, img.width * 0.1, img.height, 0, 0, leftW, img.height);
+      // Draw middle 80% normal
+      ctx.drawImage(img, img.width * 0.1, 0, img.width * 0.8, img.height, leftW, 0, midW, img.height);
+      // Draw right 10% stretched
+      ctx.drawImage(img, img.width * 0.9, 0, img.width * 0.1, img.height, leftW + midW, 0, rightW, img.height);
+
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+};
+
 export default function App() {
   const [templates, setTemplates] = useState<Templates | null>(null);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
@@ -354,18 +386,36 @@ export default function App() {
 
       const pages = mergedPdf.getPages();
 
+      let pWidth = 595.28, pHeight = 841.89;
+      if (pages.length > 0) {
+          const s = pages[0].getSize();
+          pWidth = Math.min(s.width, s.height);
+          pHeight = Math.max(s.width, s.height);
+      }
+      const landscapeRatio = pHeight / pWidth;
+
+      const lsHeaderDataUrl = await generateLandscapeTemplate(templates.header, landscapeRatio);
+      const lsFooterDataUrl = await generateLandscapeTemplate(templates.footer, landscapeRatio);
+
+      const lsHeaderBytes = await fetchImage(lsHeaderDataUrl);
+      const lsFooterBytes = await fetchImage(lsFooterDataUrl);
+
+      const embeddedLsHeader = await mergedPdf.embedPng(lsHeaderBytes);
+      const embeddedLsFooter = await mergedPdf.embedPng(lsFooterBytes);
+
       for (const page of pages) {
         const { width, height } = page.getSize();
+        const isLandscape = width > height;
         
-        // Gunakan lebar portrait (sisi terpendek) untuk menghitung tinggi agar konsisten (slim) di semua orientasi
-        const portraitWidth = Math.min(width, height);
+        const currentHeader = isLandscape ? embeddedLsHeader : embeddedHeader;
+        const currentFooter = isLandscape ? embeddedLsFooter : embeddedFooter;
 
         // Header
-        const headerDims = embeddedHeader.scale(1);
-        const headerScale = portraitWidth / headerDims.width;
+        const headerDims = currentHeader.scale(1);
+        const headerScale = width / headerDims.width;
         // Mengurangi tinggi header sebesar 20% (dikali 0.8) agar lebih pendek
         const scaledHeaderHeight = (headerDims.height * headerScale) * 0.8;
-        page.drawImage(embeddedHeader, {
+        page.drawImage(currentHeader, {
           x: 0,
           y: height - scaledHeaderHeight,
           width: width,
@@ -373,11 +423,11 @@ export default function App() {
         });
 
         // Footer
-        const footerDims = embeddedFooter.scale(1);
-        const footerScale = portraitWidth / footerDims.width;
+        const footerDims = currentFooter.scale(1);
+        const footerScale = width / footerDims.width;
         // Mengurangi tinggi footer sebesar 20% (dikali 0.8) agar lebih pendek
         const scaledFooterHeight = (footerDims.height * footerScale) * 0.8;
-        page.drawImage(embeddedFooter, {
+        page.drawImage(currentFooter, {
           x: 0,
           y: 0,
           width: width,
