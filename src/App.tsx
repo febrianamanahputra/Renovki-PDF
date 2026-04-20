@@ -290,27 +290,61 @@ export default function App() {
     setError(null);
 
     try {
-      // Sort files naturally by filename (e.g., 1.pdf, 2.pdf, 10.pdf)
-      const sortedFiles = [...files].sort((a, b) => 
-        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-      );
-
       const mergedPdf = await PDFDocument.create();
+
+      let pagesToProcess: { pdfDoc: PDFDocument, index: number }[] = [];
+
+      // Cari file berdasarkan nama (menghapus spasi dan .pdf)
+      const getBaseName = (name: string) => name.toLowerCase().replace('.pdf', '').trim();
+      const filePdf = files.find(f => getBaseName(f.name) === 'file' || f.name.toLowerCase().includes('file'));
+      const tsPdf = files.find(f => getBaseName(f.name) === 'ts' || f.name.toLowerCase().includes('ts'));
+
+      if (files.length === 2 && filePdf && tsPdf && filePdf !== tsPdf) {
+        // --- MODE SPESIFIK: Hapus Page 2 dari "file", ganti dengan isi dari "ts" ---
+        const fileArrayBuf = await filePdf.arrayBuffer();
+        const fileDoc = await PDFDocument.load(fileArrayBuf);
+        
+        const tsArrayBuf = await tsPdf.arrayBuffer();
+        const tsDoc = await PDFDocument.load(tsArrayBuf);
+
+        const fileIndices = fileDoc.getPageIndices();
+        const tsIndices = tsDoc.getPageIndices();
+        
+        for (let i = 0; i < fileIndices.length; i++) {
+          if (i === 1) { 
+            // Halaman 2 (index 1) dari file dihapus/digantikan dengan seluruh pdf TS
+            for (const j of tsIndices) {
+              pagesToProcess.push({ pdfDoc: tsDoc, index: j });
+            }
+          } else {
+            pagesToProcess.push({ pdfDoc: fileDoc, index: i });
+          }
+        }
+      } else {
+        // --- MODE NORMAL: Gabung semua urut berdasarkan nama ---
+        const sortedFiles = [...files].sort((a, b) => 
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+
+        for (const file of sortedFiles) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await PDFDocument.load(arrayBuffer);
+          const indices = pdfDoc.getPageIndices();
+          for (const index of indices) {
+            pagesToProcess.push({ pdfDoc, index });
+          }
+        }
+      }
 
       let globalPageIndex = 0;
 
-      for (const file of sortedFiles) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
-        const indices = pdfDoc.getPageIndices();
+      for (const { pdfDoc, index } of pagesToProcess) {
+        globalPageIndex++;
+        // Halaman ke-2 selalu landscape, sisanya portrait
+        const isTargetLandscape = (globalPageIndex === 2);
 
-        for (const index of indices) {
-          globalPageIndex++;
-          // Halaman ke-2 selalu landscape, sisanya portrait
-          const isTargetLandscape = (globalPageIndex === 2);
-
-          const page = pdfDoc.getPage(index);
-          const angle = page.getRotation().angle;
+        const page = pdfDoc.getPage(index);
+        const angle = page.getRotation().angle;
 
           const embeddedPage = await mergedPdf.embedPage(page);
           const dims = embeddedPage.scale(1);
@@ -365,7 +399,6 @@ export default function App() {
               rotate: degrees(normalizedRotation)
           });
         }
-      }
 
       const fetchImage = async (dataUrl: string) => {
         const res = await fetch(dataUrl);
