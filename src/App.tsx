@@ -20,6 +20,12 @@ interface LocationMeta {
   name: string;
   description: string;
   address: string;
+  docDetails?: {
+    projectName: string;
+    week: string;
+    target: string;
+    weight: string;
+  };
 }
 
 const removeWhiteBackground = (file: File): Promise<string> => {
@@ -122,6 +128,8 @@ export default function App() {
   const [locDesc, setLocDesc] = useState('');
   const [locAddr, setLocAddr] = useState('');
 
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => localStorage.getItem('renovki_selectedLocId') || '');
+
   // Document Detail State (Filename generation)
   const [projectName, setProjectName] = useState(() => localStorage.getItem('renovki_projectName') || '');
   const [week, setWeek] = useState(() => localStorage.getItem('renovki_week') || '');
@@ -154,6 +162,18 @@ export default function App() {
       try {
         const locs = await get<LocationMeta[]>('history_locations') || [];
         setLocations(locs);
+        
+        // Sync document details with selected location if exists
+        const savedLocId = localStorage.getItem('renovki_selectedLocId');
+        if (savedLocId) {
+            const loc = locs.find(l => l.id === savedLocId);
+            if (loc && loc.docDetails) {
+               setProjectName(loc.docDetails.projectName);
+               setWeek(loc.docDetails.week);
+               setTarget(loc.docDetails.target);
+               setWeight(loc.docDetails.weight);
+            }
+        }
       } catch (err) {
         console.error('Failed to load locations', err);
       }
@@ -171,7 +191,13 @@ export default function App() {
       id: Date.now().toString(), 
       name: locName, 
       description: locDesc, 
-      address: locAddr 
+      address: locAddr,
+      docDetails: {
+        projectName: locName,
+        week: '',
+        target: 'Klien',
+        weight: ''
+      }
     };
     
     try {
@@ -198,12 +224,61 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem('renovki_projectName', projectName);
-    localStorage.setItem('renovki_week', week);
-    localStorage.setItem('renovki_target', target);
-    localStorage.setItem('renovki_weight', weight);
-  }, [projectName, week, target, weight]);
+  const updateDocDetail = (field: 'projectName' | 'week' | 'target' | 'weight', value: string) => {
+    if (field === 'projectName') setProjectName(value);
+    if (field === 'week') setWeek(value);
+    if (field === 'target') setTarget(value);
+    if (field === 'weight') setWeight(value);
+
+    if (!selectedLocationId) {
+       localStorage.setItem(`renovki_${field}`, value);
+    } else {
+       const updatedLocs = locations.map(loc => {
+         if (loc.id === selectedLocationId) {
+            return {
+              ...loc,
+              docDetails: {
+                projectName: loc.docDetails?.projectName ?? loc.name,
+                week: loc.docDetails?.week ?? '',
+                target: loc.docDetails?.target ?? 'Klien',
+                weight: loc.docDetails?.weight ?? '',
+                [field]: value
+              }
+            };
+         }
+         return loc;
+       });
+       setLocations(updatedLocs);
+       set('history_locations', updatedLocs).catch(console.error);
+    }
+  };
+
+  const handleLocationChange = (locId: string) => {
+    setSelectedLocationId(locId);
+    localStorage.setItem('renovki_selectedLocId', locId);
+    
+    if (!locId) {
+       setProjectName(localStorage.getItem('renovki_projectName') || '');
+       setWeek(localStorage.getItem('renovki_week') || '');
+       setTarget(localStorage.getItem('renovki_target') || 'Klien');
+       setWeight(localStorage.getItem('renovki_weight') || '');
+       return;
+    }
+
+    const loc = locations.find(l => l.id === locId);
+    if (loc) {
+       // load from loc details or default it to loc.name
+       const p = loc.docDetails?.projectName ?? loc.name;
+       const w = loc.docDetails?.week ?? '';
+       const t = loc.docDetails?.target ?? 'Klien';
+       const wg = loc.docDetails?.weight ?? '';
+       
+       setProjectName(p);
+       setWeek(w);
+       setTarget(t);
+       setWeight(wg);
+    }
+  };
 
   const loadHistory = async () => {
     try {
@@ -790,15 +865,10 @@ export default function App() {
                         <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Isi dari Lokasi:</label>
                         <select 
                           className="px-3 py-1.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm w-full md:w-auto"
-                          onChange={(e) => {
-                            const loc = locations.find(l => l.id === e.target.value);
-                            if (loc) {
-                              setProjectName(loc.name);
-                            }
-                          }}
-                          defaultValue=""
+                          onChange={(e) => handleLocationChange(e.target.value)}
+                          value={selectedLocationId}
                         >
-                          <option value="" disabled>-- Pilih Lokasi --</option>
+                          <option value="">-- Pilih Lokasi --</option>
                           {locations.map(loc => (
                             <option key={loc.id} value={loc.id}>{loc.name}</option>
                           ))}
@@ -812,7 +882,7 @@ export default function App() {
                       <input 
                         type="text" 
                         value={projectName} 
-                        onChange={e => setProjectName(e.target.value)} 
+                        onChange={e => updateDocDetail('projectName', e.target.value)} 
                         placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                       />
@@ -824,7 +894,7 @@ export default function App() {
                         <input 
                           type="text" 
                           value={week} 
-                          onChange={e => setWeek(e.target.value)} 
+                          onChange={e => updateDocDetail('week', e.target.value)} 
                           placeholder="1" 
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                         />
@@ -834,7 +904,7 @@ export default function App() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Klien / Kantor</label>
                       <select 
                         value={target} 
-                        onChange={e => setTarget(e.target.value)} 
+                        onChange={e => updateDocDetail('target', e.target.value)} 
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       >
                         <option value="Klien">Klien</option>
@@ -846,7 +916,7 @@ export default function App() {
                       <input 
                         type="text" 
                         value={weight} 
-                        onChange={e => setWeight(e.target.value)} 
+                        onChange={e => updateDocDetail('weight', e.target.value)} 
                         placeholder="Contoh: 20%" 
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                       />
