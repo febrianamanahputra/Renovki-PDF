@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PDFDocument, BlendMode, degrees } from 'pdf-lib';
-import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2 } from 'lucide-react';
+import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2, MapPin, Plus, Leaf } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 
 interface Templates {
@@ -13,6 +13,13 @@ interface HistoryMeta {
   id: string;
   filename: string;
   date: number;
+}
+
+interface LocationMeta {
+  id: string;
+  name: string;
+  description: string;
+  address: string;
 }
 
 const removeWhiteBackground = (file: File): Promise<string> => {
@@ -100,13 +107,20 @@ const generateLandscapeTemplate = (dataUrl: string, ratio: number): Promise<stri
 export default function App() {
   const [templates, setTemplates] = useState<Templates | null>(null);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'locations'>('dashboard');
   
   // Setup State
   const [setupHeader, setSetupHeader] = useState<File | null>(null);
   const [setupFooter, setSetupFooter] = useState<File | null>(null);
   const [setupWatermark, setSetupWatermark] = useState<File | null>(null);
   const [isSavingSetup, setIsSavingSetup] = useState(false);
+
+  // Locations State
+  const [locations, setLocations] = useState<LocationMeta[]>([]);
+  const [showLocationForm, setShowLocationForm] = useState(false);
+  const [locName, setLocName] = useState('');
+  const [locDesc, setLocDesc] = useState('');
+  const [locAddr, setLocAddr] = useState('');
 
   // Document Detail State (Filename generation)
   const [projectName, setProjectName] = useState(() => localStorage.getItem('renovki_projectName') || '');
@@ -136,9 +150,53 @@ export default function App() {
       }
       setIsLoadingTemplates(false);
     };
+    const loadLocations = async () => {
+      try {
+        const locs = await get<LocationMeta[]>('history_locations') || [];
+        setLocations(locs);
+      } catch (err) {
+        console.error('Failed to load locations', err);
+      }
+    };
     loadTemplates();
     loadHistory();
+    loadLocations();
   }, []);
+
+  const saveLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!locName.trim()) return;
+    
+    const newLoc: LocationMeta = { 
+      id: Date.now().toString(), 
+      name: locName, 
+      description: locDesc, 
+      address: locAddr 
+    };
+    
+    try {
+      const updated = [...locations, newLoc];
+      await set('history_locations', updated);
+      setLocations(updated);
+      setShowLocationForm(false);
+      setLocName('');
+      setLocDesc('');
+      setLocAddr('');
+    } catch (err) {
+      console.error('Failed to save location', err);
+    }
+  };
+
+  const deleteLocation = async (id: string) => {
+    if (!window.confirm('Hapus lokasi ini?')) return;
+    try {
+      const updated = locations.filter(l => l.id !== id);
+      await set('history_locations', updated);
+      setLocations(updated);
+    } catch (err) {
+      console.error('Failed to delete location', err);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('renovki_projectName', projectName);
@@ -356,22 +414,32 @@ export default function App() {
           const visualWidth = (angle === 90 || angle === 270) ? dims.height : dims.width;
           const visualHeight = (angle === 90 || angle === 270) ? dims.width : dims.height;
 
+          const A4_W = 595.28;
+          const A4_H = 841.89;
+
           let finalWidth, finalHeight;
           let additionalRotation = 0;
+          let shouldCenterAndFit = true;
 
           if (isTargetLandscape) {
-              finalWidth = Math.max(visualWidth, visualHeight);
-              finalHeight = Math.min(visualWidth, visualHeight);
+              // Ukuran kertas dipaksa landscape A4
+              finalWidth = A4_H;
+              finalHeight = A4_W;
+              
+              // Putar tabel agar selaras dan mengisi ruang landscape dengan optimal
               if (!isVisuallyLandscape) {
-                  additionalRotation = 270; // Diputar ke arah sebaliknya (-90 derajat) agar tidak terbalik saat diprint
+                  additionalRotation = 270 + 90; // Putar tambahan 90 derajat dari sebelumnya (270)
               } else {
-                  additionalRotation = 180; // Jika aslinya sudah landscape, kita putar 180 derajat juga
+                  additionalRotation = 90; // Putar tambahan 90 derajat dari sebelumnya (0)
               }
           } else {
-              finalWidth = Math.min(visualWidth, visualHeight);
-              finalHeight = Math.max(visualWidth, visualHeight);
+              // Ukuran kertas dipaksa portrait A4
+              finalWidth = A4_W;
+              finalHeight = A4_H;
               if (isVisuallyLandscape) {
-                  additionalRotation = -90;
+                  additionalRotation = 270;
+              } else {
+                  additionalRotation = 0;
               }
           }
 
@@ -381,21 +449,62 @@ export default function App() {
           const newPage = mergedPdf.addPage([finalWidth, finalHeight]);
           
           let tx = 0, ty = 0;
-          if (normalizedRotation === 0) {
-              tx = 0; ty = 0;
-          } else if (normalizedRotation === 90) {
-              tx = finalWidth; ty = 0;
-          } else if (normalizedRotation === 180) {
-              tx = finalWidth; ty = finalHeight;
-          } else if (normalizedRotation === 270) {
-              tx = 0; ty = finalHeight;
+          let drawW = dims.width;
+          let drawH = dims.height;
+
+          if (shouldCenterAndFit) {
+              const contentVisualWidth = (normalizedRotation === 90 || normalizedRotation === 270) ? dims.height : dims.width;
+              const contentVisualHeight = (normalizedRotation === 90 || normalizedRotation === 270) ? dims.width : dims.height;
+
+              // Scale to fit finalWidth and finalHeight (keep aspect ratio)
+              let scale = Math.min(finalWidth / contentVisualWidth, finalHeight / contentVisualHeight);
+              
+              if (isTargetLandscape) {
+                  // Perbesar 2 kali lipat khusus untuk page landscape
+                  scale *= 2.0;
+              }
+              
+              drawW = dims.width * scale;
+              drawH = dims.height * scale;
+              
+              const scaledVisualWidth = contentVisualWidth * scale;
+              const scaledVisualHeight = contentVisualHeight * scale;
+
+              if (normalizedRotation === 0) {
+                  tx = (finalWidth - scaledVisualWidth) / 2;
+                  ty = (finalHeight - scaledVisualHeight) / 2;
+              } else if (normalizedRotation === 90) {
+                  tx = (finalWidth - scaledVisualWidth) / 2 + scaledVisualWidth;
+                  ty = (finalHeight - scaledVisualHeight) / 2;
+              } else if (normalizedRotation === 180) {
+                  tx = (finalWidth - scaledVisualWidth) / 2 + scaledVisualWidth;
+                  ty = (finalHeight - scaledVisualHeight) / 2 + scaledVisualHeight;
+              } else if (normalizedRotation === 270) {
+                  tx = (finalWidth - scaledVisualWidth) / 2;
+                  ty = (finalHeight - scaledVisualHeight) / 2 + scaledVisualHeight;
+              }
+          } else {
+              if (normalizedRotation === 0) {
+                  tx = 0; ty = 0;
+              } else if (normalizedRotation === 90) {
+                  tx = finalWidth; ty = 0;
+              } else if (normalizedRotation === 180) {
+                  tx = finalWidth; ty = finalHeight;
+              } else if (normalizedRotation === 270) {
+                  tx = 0; ty = finalHeight;
+              }
+          }
+          
+          if (shouldCenterAndFit && isTargetLandscape) {
+              // Buat turun 20% dari posisi terakhir 30%, jadi total turun 50%
+              ty -= finalHeight * 0.5;
           }
 
           newPage.drawPage(embeddedPage, {
               x: tx,
               y: ty,
-              width: dims.width,
-              height: dims.height,
+              width: drawW,
+              height: drawH,
               rotate: degrees(normalizedRotation)
           });
         }
@@ -525,58 +634,75 @@ export default function App() {
   if (isLoadingTemplates) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen bg-green-50 font-sans relative overflow-hidden text-gray-800">
+      {/* Background Banana with Fluted Glass */}
+      <div className="absolute inset-0 z-0 bg-[url('https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&q=80')] bg-cover bg-center" />
+      <div className="absolute inset-0 z-0 backdrop-blur-md bg-white/40" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 20px)' }} />
+
+      <div className="relative z-10 flex h-full w-full">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <aside className="w-64 bg-white/80 backdrop-blur-xl border-r border-green-200/50 flex flex-col">
         <div 
-          className="h-16 flex items-center px-6 border-b border-gray-200 cursor-pointer select-none" 
+          className="h-16 flex items-center px-6 border-b border-green-200/50 cursor-pointer select-none" 
           onDoubleClick={resetTemplates}
           title="Double-click to reset templates"
         >
-          <div className="flex items-center gap-2 text-blue-600 font-bold text-xl tracking-tight">
-            <FileText className="w-6 h-6" />
-            <span>PDF Renovki</span>
+          <div className="flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-br from-green-600 to-green-400 font-bold text-xl tracking-tight">
+            <Leaf className="w-6 h-6 text-green-500" />
+            <span>Eco Renovki</span>
           </div>
         </div>
         
         <nav className="flex-1 p-4 space-y-1">
           <button 
             onClick={() => setCurrentView('dashboard')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'dashboard' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
           >
             <LayoutDashboard className="w-5 h-5" />
             Dashboard
           </button>
           <button 
+            onClick={() => setCurrentView('locations')}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'locations' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
+          >
+            <MapPin className="w-5 h-5" />
+            Lokasi
+          </button>
+          <button 
             onClick={() => setCurrentView('history')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'history' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'history' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
           >
             <History className="w-5 h-5" />
             Riwayat
           </button>
         </nav>
         
-        <div className="p-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          &copy; 2026 PDF Renovki<br/>
-          <span className="opacity-50">Double-click logo to reset</span>
+        <div className="p-4 border-t border-green-200/50 text-xs text-gray-500 text-center relative overflow-hidden">
+          {/* Watermark Logo in sidebar background */}
+          <Leaf className="absolute -right-4 -bottom-4 w-24 h-24 text-green-100 opacity-50 z-0 pointer-events-none" />
+          <div className="relative z-10">
+            &copy; 2026 Eco Renovki<br/>
+            <span className="opacity-70">Double-click logo to reset</span>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
-          <h1 className="text-xl font-semibold text-gray-800">
-            {currentView === 'dashboard' ? 'Dashboard' : 'Riwayat Dokumen'}
+      <main className="flex-1 flex flex-col overflow-hidden bg-white/40 backdrop-blur-sm">
+        <header className="h-16 bg-white/60 backdrop-blur-md border-b border-green-200/50 flex items-center px-8 relative overflow-hidden">
+          <Leaf className="absolute -top-10 -right-10 w-40 h-40 text-green-500/10 z-0 pointer-events-none" />
+          <h1 className="text-xl font-semibold text-gray-800 relative z-10">
+            {currentView === 'dashboard' ? 'Dashboard' : currentView === 'history' ? 'Riwayat Dokumen' : 'Data Lokasi'}
           </h1>
         </header>
 
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 relative z-10">
           <div className="max-w-5xl mx-auto">
             
             {error && (
@@ -588,7 +714,7 @@ export default function App() {
 
             {!templates ? (
               /* Setup Screen */
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
                 <div className="text-center mb-8">
                   <h2 className="text-2xl font-bold text-gray-900">Setup Template Satu Kali</h2>
                   <p className="text-gray-500 mt-2">Silakan unggah ketiga gambar template Anda di sini. Ini hanya perlu dilakukan sekali.</p>
@@ -599,10 +725,10 @@ export default function App() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">1. Upload Gambar Header</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupHeader(e.target.files[0])} />
                         <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5" />
+                          <ImageIcon className="w-5 h-5 text-green-500" />
                           <span>{setupHeader ? setupHeader.name : 'Pilih Gambar Header'}</span>
                         </div>
                       </label>
@@ -613,10 +739,10 @@ export default function App() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">2. Upload Gambar Footer</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupFooter(e.target.files[0])} />
                         <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5" />
+                          <ImageIcon className="w-5 h-5 text-green-500" />
                           <span>{setupFooter ? setupFooter.name : 'Pilih Gambar Footer'}</span>
                         </div>
                       </label>
@@ -627,10 +753,10 @@ export default function App() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">3. Upload Gambar Watermark</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupWatermark(e.target.files[0])} />
                         <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5" />
+                          <ImageIcon className="w-5 h-5 text-green-500" />
                           <span>{setupWatermark ? setupWatermark.name : 'Pilih Gambar Watermark'}</span>
                         </div>
                       </label>
@@ -641,7 +767,7 @@ export default function App() {
                   <button
                     onClick={handleSaveSetup}
                     disabled={isSavingSetup || !setupHeader || !setupFooter || !setupWatermark}
-                    className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-8"
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-400 text-white py-3 px-4 rounded-lg font-medium hover:from-green-600 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm mt-8"
                   >
                     {isSavingSetup ? (
                       <><Loader2 className="w-5 h-5 animate-spin" /> Menyimpan Template...</>
@@ -656,8 +782,30 @@ export default function App() {
               <div className="space-y-6">
                 
                 {/* Detail Dokumen Form */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Detail Dokumen (Untuk Penamaan File)</h3>
+                <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Detail Dokumen (Untuk Penamaan File)</h3>
+                    {locations.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Isi dari Lokasi:</label>
+                        <select 
+                          className="px-3 py-1.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm w-full md:w-auto"
+                          onChange={(e) => {
+                            const loc = locations.find(l => l.id === e.target.value);
+                            if (loc) {
+                              setProjectName(loc.name);
+                            }
+                          }}
+                          defaultValue=""
+                        >
+                          <option value="" disabled>-- Pilih Lokasi --</option>
+                          {locations.map(loc => (
+                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Nama Project</label>
@@ -666,7 +814,7 @@ export default function App() {
                         value={projectName} 
                         onChange={e => setProjectName(e.target.value)} 
                         placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                       />
                     </div>
                     <div>
@@ -678,7 +826,7 @@ export default function App() {
                           value={week} 
                           onChange={e => setWeek(e.target.value)} 
                           placeholder="1" 
-                          className="w-full px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                         />
                       </div>
                     </div>
@@ -687,7 +835,7 @@ export default function App() {
                       <select 
                         value={target} 
                         onChange={e => setTarget(e.target.value)} 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       >
                         <option value="Klien">Klien</option>
                         <option value="Kantor">Kantor</option>
@@ -700,23 +848,23 @@ export default function App() {
                         value={weight} 
                         onChange={e => setWeight(e.target.value)} 
                         placeholder="Contoh: 20%" 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                       />
                     </div>
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <p className="text-sm text-blue-800">
+                  <div className="mt-4 p-3 bg-green-50/50 rounded-md border border-green-100">
+                    <p className="text-sm text-green-800">
                       <strong>Preview Nama File:</strong> {getFilename()}
                     </p>
                   </div>
                 </div>
 
                 {/* Upload Area */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
                   <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={handleDrop}
-                    className="border-2 border-dashed border-blue-200 rounded-xl p-12 text-center bg-blue-50/50 hover:bg-blue-50 transition-colors cursor-pointer"
+                    className="border-2 border-dashed border-green-300 rounded-xl p-12 text-center bg-white/50 hover:bg-green-50 transition-colors cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <input
@@ -727,7 +875,7 @@ export default function App() {
                       className="hidden"
                       multiple
                     />
-                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileUp className="w-8 h-8" />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload PDF Document(s)</h3>
@@ -740,10 +888,10 @@ export default function App() {
 
                 {/* Processing & Result Area */}
                 {(isProcessing || processedPdfUrl) && (
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                  <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
                     {isProcessing ? (
                       <div className="flex flex-col items-center justify-center py-12">
-                        <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
+                        <Loader2 className="w-12 h-12 animate-spin text-green-500 mb-4" />
                         <h3 className="text-lg font-medium text-gray-900">Memproses PDF...</h3>
                         <p className="text-gray-500">Menerapkan Header, Footer, dan Watermark</p>
                       </div>
@@ -769,7 +917,7 @@ export default function App() {
                           </a>
                           <button
                             onClick={handleDownload}
-                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-lg font-medium hover:from-green-600 hover:to-green-500 shadow-sm"
                           >
                             <Download className="w-5 h-5" />
                             Download PDF
@@ -780,35 +928,35 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : currentView === 'history' ? (
               /* History View */
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
+              <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 overflow-hidden">
+                <div className="p-6 border-b border-green-200/50">
                   <h2 className="text-lg font-semibold text-gray-900">Riwayat Dokumen (Draft)</h2>
                   <p className="text-sm text-gray-500 mt-1">Dokumen yang telah diproses akan tersimpan di sini secara lokal di browser Anda.</p>
                 </div>
                 
                 {history.length === 0 ? (
                   <div className="p-12 text-center text-gray-500">
-                    <History className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                    <History className="w-12 h-12 mx-auto text-green-300 mb-3" />
                     <p>Belum ada riwayat dokumen.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse bg-white/50">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
+                        <tr className="bg-green-50/50 border-b border-green-200/50">
                           <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Nama File</th>
                           <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Dibuat</th>
                           <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Aksi</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody className="divide-y divide-green-200/50">
                         {history.map((item) => (
-                          <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <tr key={item.id} className="hover:bg-green-50/50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
-                                <FileText className="w-5 h-5 text-blue-500" />
+                                <FileText className="w-5 h-5 text-green-500" />
                                 <span className="font-medium text-gray-900">{item.filename}</span>
                               </div>
                             </td>
@@ -819,7 +967,7 @@ export default function App() {
                               <div className="flex items-center justify-end gap-3">
                                 <button 
                                   onClick={() => downloadFromHistory(item.id, item.filename)}
-                                  className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
+                                  className="text-green-600 hover:text-green-900 flex items-center gap-1"
                                 >
                                   <Download className="w-4 h-4" /> Download
                                 </button>
@@ -838,11 +986,99 @@ export default function App() {
                   </div>
                 )}
               </div>
+            ) : (
+              /* Locations View */
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-gray-900">Kelola Lokasi</h2>
+                  <button 
+                    onClick={() => setShowLocationForm(!showLocationForm)}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-lg font-medium shadow-sm hover:from-green-600 hover:to-green-500"
+                  >
+                    {showLocationForm ? 'Batal Tambah' : <><Plus className="w-4 h-4" /> Tambah Lokasi</>}
+                  </button>
+                </div>
+
+                {showLocationForm && (
+                  <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Tambah Lokasi Baru</h3>
+                    <form onSubmit={saveLocation} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lokasi</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={locName} 
+                          onChange={e => setLocName(e.target.value)} 
+                          placeholder="Pusat Kota" 
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Alamat (Opsional)</label>
+                        <input 
+                          type="text" 
+                          value={locAddr} 
+                          onChange={e => setLocAddr(e.target.value)} 
+                          placeholder="Jl. Raya No. 123" 
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Detail / Deskripsi (Opsional)</label>
+                        <textarea 
+                          value={locDesc} 
+                          onChange={e => setLocDesc(e.target.value)} 
+                          placeholder="Detail tambahan lokasi ini..." 
+                          rows={3}
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        />
+                      </div>
+                      <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={() => setShowLocationForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Batal</button>
+                        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-sm">Simpan</button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {locations.length === 0 ? (
+                    <div className="col-span-full p-12 text-center text-gray-500 bg-white/50 backdrop-blur-md rounded-xl border border-green-200/50">
+                      <MapPin className="w-12 h-12 mx-auto text-green-300 mb-3" />
+                      <p>Belum ada lokasi tersimpan.</p>
+                    </div>
+                  ) : (
+                    locations.map(loc => (
+                      <div key={loc.id} className="bg-white/80 backdrop-blur-md p-6 rounded-xl shadow-sm border border-green-200/50 flex flex-col items-start gap-3 relative group">
+                        <div className="flex items-center gap-3 w-full border-b border-green-100 pb-3">
+                          <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                            <MapPin className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900 truncate">{loc.name}</h4>
+                            {loc.address && <p className="text-xs text-gray-500 truncate">{loc.address}</p>}
+                          </div>
+                        </div>
+                        {loc.description && <p className="text-sm text-gray-600 flex-1">{loc.description}</p>}
+                        <button 
+                          onClick={() => deleteLocation(loc.id)}
+                          className="mt-2 text-xs flex items-center gap-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 px-2 py-1 rounded"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Hapus Lokasi
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
 
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }
