@@ -142,6 +142,7 @@ export default function App() {
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedPdfUrl, setProcessedPdfUrl] = useState<string | null>(null);
+  const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [generatedFilename, setGeneratedFilename] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -401,23 +402,45 @@ export default function App() {
   };
 
   const getCaptionText = () => {
-    return `Bismillah, Tabe ${clientName ? clientName : '[Nama Klien]'}\nBerikut Laporan Progress Pekanan\nProject ${projectName ? projectName : '[Nama Project]'} + Pekan Ke ${week ? week : '[Nomor Pekan]'}`;
+    return `Bismillah, Tabe ${clientName ? clientName : '[Nama Klien]'}\nBerikut Laporan Progress Pekanan\nProject ${projectName ? projectName : '[Nama Project]'} Pekan Ke ${week ? week : '[Nomor Pekan]'}`;
   };
 
   const handleCopyCaption = async () => {
+    const text = getCaptionText();
     try {
-      await navigator.clipboard.writeText(getCaptionText());
-      alert('Caption berhasil disalin!');
+      await navigator.clipboard.writeText(text);
     } catch (err) {
       console.error('Failed to copy text: ', err);
-      alert('Gagal menyalin caption.');
     }
+    // Langsung arahkan ke web WA
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   };
 
-  const handleShareWA = () => {
-    // Generate WhatsApp share link (for text) or you can use web share API
-    const text = encodeURIComponent(getCaptionText());
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+  const handleShareWA = async () => {
+    const text = getCaptionText();
+    
+    // Attempt to use Web Share API with the PDF file natively
+    if (processedBlob && navigator.canShare) {
+      const file = new File([processedBlob], generatedFilename || 'Laporan.pdf', { type: 'application/pdf' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: generatedFilename || 'Laporan Progress',
+            text: text,
+          });
+          return; // Terkirim melalui native share (lampiran file + text)
+        } catch (error) {
+          console.log('Web share failed or cancelled, falling back to text only', error);
+          // Fallback to purely text via wa.me link
+        }
+      }
+    }
+
+    // Jika di komputer / browser tidak dukung share file pdf
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -705,6 +728,7 @@ export default function App() {
       const filename = getFilename();
       setGeneratedFilename(filename);
       setProcessedPdfUrl(url);
+      setProcessedBlob(blob);
       
       // Save to history
       await addToHistory(filename, pdfBytes);
