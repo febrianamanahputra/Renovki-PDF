@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PDFDocument, BlendMode, degrees } from 'pdf-lib';
-import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2, MapPin, Plus, Leaf } from 'lucide-react';
+import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2, MapPin, Plus, Leaf, MessageCircle, Copy } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 
 interface Templates {
@@ -25,6 +25,7 @@ interface LocationMeta {
     week: string;
     target: string;
     weight: string;
+    clientName?: string;
   };
 }
 
@@ -135,6 +136,7 @@ export default function App() {
   const [week, setWeek] = useState(() => localStorage.getItem('renovki_week') || '');
   const [target, setTarget] = useState(() => localStorage.getItem('renovki_target') || 'Klien');
   const [weight, setWeight] = useState(() => localStorage.getItem('renovki_weight') || '');
+  const [clientName, setClientName] = useState(() => localStorage.getItem('renovki_clientName') || '');
 
   // App State
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -172,6 +174,7 @@ export default function App() {
                setWeek(loc.docDetails.week);
                setTarget(loc.docDetails.target);
                setWeight(loc.docDetails.weight);
+               setClientName(loc.docDetails.clientName || '');
             }
         }
       } catch (err) {
@@ -196,7 +199,8 @@ export default function App() {
         projectName: locName,
         week: '',
         target: 'Klien',
-        weight: ''
+        weight: '',
+        clientName: ''
       }
     };
     
@@ -224,11 +228,12 @@ export default function App() {
     }
   };
 
-  const updateDocDetail = (field: 'projectName' | 'week' | 'target' | 'weight', value: string) => {
+  const updateDocDetail = (field: 'projectName' | 'week' | 'target' | 'weight' | 'clientName', value: string) => {
     if (field === 'projectName') setProjectName(value);
     if (field === 'week') setWeek(value);
     if (field === 'target') setTarget(value);
     if (field === 'weight') setWeight(value);
+    if (field === 'clientName') setClientName(value);
 
     if (!selectedLocationId) {
        localStorage.setItem(`renovki_${field}`, value);
@@ -242,6 +247,7 @@ export default function App() {
                 week: loc.docDetails?.week ?? '',
                 target: loc.docDetails?.target ?? 'Klien',
                 weight: loc.docDetails?.weight ?? '',
+                clientName: loc.docDetails?.clientName ?? '',
                 [field]: value
               }
             };
@@ -262,6 +268,7 @@ export default function App() {
        setWeek(localStorage.getItem('renovki_week') || '');
        setTarget(localStorage.getItem('renovki_target') || 'Klien');
        setWeight(localStorage.getItem('renovki_weight') || '');
+       setClientName(localStorage.getItem('renovki_clientName') || '');
        return;
     }
 
@@ -272,11 +279,13 @@ export default function App() {
        const w = loc.docDetails?.week ?? '';
        const t = loc.docDetails?.target ?? 'Klien';
        const wg = loc.docDetails?.weight ?? '';
+       const c = loc.docDetails?.clientName ?? '';
        
        setProjectName(p);
        setWeek(w);
        setTarget(t);
        setWeight(wg);
+       setClientName(c);
     }
   };
 
@@ -389,6 +398,26 @@ export default function App() {
     const t = `(${target})`;
     const b = weight.trim() ? `Bobot ${weight.trim()}` : 'Bobot X';
     return `${p} ${w} ${t} ${b}.pdf`;
+  };
+
+  const getCaptionText = () => {
+    return `Bismillah, Tabe ${clientName ? clientName : '[Nama Klien]'}\nBerikut Laporan Progress Pekanan\nProject ${projectName ? projectName : '[Nama Project]'} + Pekan Ke ${week ? week : '[Nomor Pekan]'}`;
+  };
+
+  const handleCopyCaption = async () => {
+    try {
+      await navigator.clipboard.writeText(getCaptionText());
+      alert('Caption berhasil disalin!');
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      alert('Gagal menyalin caption.');
+    }
+  };
+
+  const handleShareWA = () => {
+    // Generate WhatsApp share link (for text) or you can use web share API
+    const text = encodeURIComponent(getCaptionText());
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -876,7 +905,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Nama Project</label>
                       <input 
@@ -884,6 +913,16 @@ export default function App() {
                         value={projectName} 
                         onChange={e => updateDocDetail('projectName', e.target.value)} 
                         placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nama Klien</label>
+                      <input 
+                        type="text" 
+                        value={clientName} 
+                        onChange={e => updateDocDetail('clientName', e.target.value)} 
+                        placeholder="Contoh: Bpk. Budi" 
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
                       />
                     </div>
@@ -975,7 +1014,7 @@ export default function App() {
                           Dokumen Anda telah berhasil diperbarui dan disimpan ke Riwayat.
                         </p>
                         
-                        <div className="flex gap-4">
+                        <div className="flex flex-wrap gap-4">
                           <a
                             href={processedPdfUrl}
                             target="_blank"
@@ -991,6 +1030,20 @@ export default function App() {
                           >
                             <Download className="w-5 h-5" />
                             Download PDF
+                          </button>
+                          <button
+                            onClick={handleShareWA}
+                            className="flex items-center gap-2 px-6 py-3 bg-[#25D366] text-white rounded-lg font-medium hover:bg-[#128C7E] transition-colors shadow-sm"
+                          >
+                            <MessageCircle className="w-5 h-5" />
+                            Share WA
+                          </button>
+                          <button
+                            onClick={handleCopyCaption}
+                            className="flex items-center gap-2 px-6 py-3 bg-white border border-green-300 text-green-700 rounded-lg font-medium hover:bg-green-50 transition-colors shadow-sm"
+                          >
+                            <Copy className="w-5 h-5" />
+                            Caption
                           </button>
                         </div>
                       </div>
