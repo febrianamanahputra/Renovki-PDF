@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PDFDocument, BlendMode, degrees } from 'pdf-lib';
-import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2, MapPin, Plus, Leaf, MessageCircle, Copy } from 'lucide-react';
+import { FileText, Upload, Download, LayoutDashboard, FileUp, FileOutput, Loader2, Image as ImageIcon, Save, History, Trash2, MapPin, Plus, Settings, MessageCircle, Copy } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 
 interface Templates {
@@ -114,7 +114,7 @@ const generateLandscapeTemplate = (dataUrl: string, ratio: number): Promise<stri
 export default function App() {
   const [templates, setTemplates] = useState<Templates | null>(null);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'locations'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'locations' | 'landscape'>('dashboard');
   
   // Setup State
   const [setupHeader, setSetupHeader] = useState<File | null>(null);
@@ -674,7 +674,7 @@ export default function App() {
 
       for (const page of pages) {
         const { width, height } = page.getSize();
-        const isLandscape = width > height;
+        const isLandscape = currentView === 'landscape' ? true : width > height;
         
         const currentHeader = isLandscape ? embeddedLsHeader : embeddedHeader;
         const currentFooter = isLandscape ? embeddedLsFooter : embeddedFooter;
@@ -761,78 +761,69 @@ export default function App() {
 
   if (isLoadingTemplates) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      <div className="min-h-screen flex items-center justify-center bg-[#130904]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#F88F22]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-green-50 font-sans relative overflow-hidden text-gray-800">
-      {/* Background Banana with Fluted Glass */}
-      <div className="absolute inset-0 z-0 bg-[url('https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&q=80')] bg-cover bg-center" />
-      <div className="absolute inset-0 z-0 backdrop-blur-md bg-white/40" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 20px)' }} />
+    <div className="min-h-screen bg-[#130904] font-sans relative text-[#FFE3B3] flex flex-col items-center pt-16 pb-12 overflow-y-auto">
+      {/* Background Gradient Sunset */}
+      <div className="fixed inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#EA6113]/20 via-[#130904] to-[#0a0502]" />
+      
+      {/* Fluted Glass effect */}
+      <div className="fixed inset-0 z-0 opacity-20 mix-blend-overlay" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.02) 10px, rgba(255,255,255,0.02) 20px)' }} />
 
-      <div className="relative z-10 flex h-full w-full">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white/80 backdrop-blur-xl border-r border-green-200/50 flex flex-col">
+      <div className="relative z-10 w-full max-w-5xl px-6 flex flex-col items-center">
+        {/* Brand / Logo */}
         <div 
-          className="h-16 flex items-center px-6 border-b border-green-200/50 cursor-pointer select-none" 
+          className="inline-flex items-center justify-center gap-3 px-6 py-3 rounded-full border border-[#EA6113]/30 bg-[#ea6113]/10 backdrop-blur-md mb-6 cursor-pointer hover:bg-[#ea6113]/20 transition-colors"
           onDoubleClick={resetTemplates}
           title="Double-click to reset templates"
         >
-          <div className="flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-br from-green-600 to-green-400 font-bold text-xl tracking-tight">
-            <Leaf className="w-6 h-6 text-green-500" />
-            <span>Eco Renovki</span>
-          </div>
+          <Settings className="w-5 h-5 text-[#FBB931]" />
+          <span className="text-[#EA6113] font-bold text-2xl tracking-tight">RENOVKI PDF</span>
         </div>
-        
-        <nav className="flex-1 p-4 space-y-1">
+
+        <p className="text-[#FBB931]/70 text-center text-lg max-w-xl mb-10 font-medium">
+          A beautiful, complete set of PDF tools right in your browser. Fast, secure, and purely client-side.
+        </p>
+
+        {/* Navigation Wrapper */}
+        <nav className="inline-flex items-center p-1.5 rounded-full border border-white/5 bg-white/5 backdrop-blur-xl mb-12 flex-wrap justify-center gap-1">
           <button 
             onClick={() => setCurrentView('dashboard')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'dashboard' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'dashboard' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
           >
-            <LayoutDashboard className="w-5 h-5" />
+            <LayoutDashboard className="w-4 h-4" />
             Dashboard
           </button>
           <button 
-            onClick={() => setCurrentView('locations')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'locations' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
+            onClick={() => setCurrentView('landscape')}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'landscape' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
           >
-            <MapPin className="w-5 h-5" />
+            <ImageIcon className="w-4 h-4" />
+            Landscape Mode
+          </button>
+          <button 
+            onClick={() => setCurrentView('locations')}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'locations' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+          >
+            <MapPin className="w-4 h-4" />
             Lokasi
           </button>
           <button 
             onClick={() => setCurrentView('history')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${currentView === 'history' ? 'bg-gradient-to-r from-green-500 to-green-400 text-white shadow-sm' : 'text-gray-600 hover:bg-green-50'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'history' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
           >
-            <History className="w-5 h-5" />
+            <History className="w-4 h-4" />
             Riwayat
           </button>
         </nav>
-        
-        <div className="p-4 border-t border-green-200/50 text-xs text-gray-500 text-center relative overflow-hidden">
-          {/* Watermark Logo in sidebar background */}
-          <Leaf className="absolute -right-4 -bottom-4 w-24 h-24 text-green-100 opacity-50 z-0 pointer-events-none" />
-          <div className="relative z-10">
-            &copy; 2026 Eco Renovki<br/>
-            <span className="opacity-70">Double-click logo to reset</span>
-          </div>
-        </div>
-      </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-white/40 backdrop-blur-sm">
-        <header className="h-16 bg-white/60 backdrop-blur-md border-b border-green-200/50 flex items-center px-8 relative overflow-hidden">
-          <Leaf className="absolute -top-10 -right-10 w-40 h-40 text-green-500/10 z-0 pointer-events-none" />
-          <h1 className="text-xl font-semibold text-gray-800 relative z-10">
-            {currentView === 'dashboard' ? 'Dashboard' : currentView === 'history' ? 'Riwayat Dokumen' : 'Data Lokasi'}
-          </h1>
-        </header>
-
-        <div className="flex-1 overflow-auto p-8 relative z-10">
-          <div className="max-w-5xl mx-auto">
-            
+        <div className="w-full">
+          
             {error && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
@@ -842,21 +833,21 @@ export default function App() {
 
             {!templates ? (
               /* Setup Screen */
-              <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
+              <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-8">
                 <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900">Setup Template Satu Kali</h2>
-                  <p className="text-gray-500 mt-2">Silakan unggah ketiga gambar template Anda di sini. Ini hanya perlu dilakukan sekali.</p>
+                  <h2 className="text-2xl font-bold text-white">Setup Template Satu Kali</h2>
+                  <p className="text-white/60 mt-2">Silakan unggah ketiga gambar template Anda di sini. Ini hanya perlu dilakukan sekali.</p>
                 </div>
 
                 <div className="space-y-6">
                   {/* Header Upload */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">1. Upload Gambar Header</label>
+                    <label className="block text-sm font-medium text-white/80 mb-2">1. Upload Gambar Header</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-[#F88F22]/40 rounded-lg bg-black/20 hover:bg-white/5 focus-within:ring-2 focus-within:ring-[#F88F22] cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupHeader(e.target.files[0])} />
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5 text-green-500" />
+                        <div className="flex items-center gap-2 text-white/70">
+                          <ImageIcon className="w-5 h-5 text-[#F88F22]" />
                           <span>{setupHeader ? setupHeader.name : 'Pilih Gambar Header'}</span>
                         </div>
                       </label>
@@ -865,12 +856,12 @@ export default function App() {
 
                   {/* Footer Upload */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">2. Upload Gambar Footer</label>
+                    <label className="block text-sm font-medium text-white/80 mb-2">2. Upload Gambar Footer</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-[#F88F22]/40 rounded-lg bg-black/20 hover:bg-white/5 focus-within:ring-2 focus-within:ring-[#F88F22] cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupFooter(e.target.files[0])} />
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5 text-green-500" />
+                        <div className="flex items-center gap-2 text-white/70">
+                          <ImageIcon className="w-5 h-5 text-[#F88F22]" />
                           <span>{setupFooter ? setupFooter.name : 'Pilih Gambar Footer'}</span>
                         </div>
                       </label>
@@ -879,23 +870,23 @@ export default function App() {
 
                   {/* Watermark Upload */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">3. Upload Gambar Watermark</label>
+                    <label className="block text-sm font-medium text-white/80 mb-2">3. Upload Gambar Watermark</label>
                     <div className="flex items-center gap-4">
-                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-green-300 rounded-lg bg-white hover:bg-green-50 focus-within:ring-2 focus-within:ring-green-400 cursor-pointer transition-colors">
+                      <label className="flex-1 flex items-center justify-center px-4 py-4 border-2 border-dashed border-[#F88F22]/40 rounded-lg bg-black/20 hover:bg-white/5 focus-within:ring-2 focus-within:ring-[#F88F22] cursor-pointer transition-colors">
                         <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={(e) => e.target.files && setSetupWatermark(e.target.files[0])} />
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <ImageIcon className="w-5 h-5 text-green-500" />
+                        <div className="flex items-center gap-2 text-white/70">
+                          <ImageIcon className="w-5 h-5 text-[#F88F22]" />
                           <span>{setupWatermark ? setupWatermark.name : 'Pilih Gambar Watermark'}</span>
                         </div>
                       </label>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">Background putih akan otomatis dihapus.</p>
+                    <p className="text-xs text-white/50 mt-2">Background putih akan otomatis dihapus.</p>
                   </div>
 
                   <button
                     onClick={handleSaveSetup}
                     disabled={isSavingSetup || !setupHeader || !setupFooter || !setupWatermark}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-400 text-white py-3 px-4 rounded-lg font-medium hover:from-green-600 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm mt-8"
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white py-3 px-4 rounded-lg font-medium hover:from-[#F88F22] hover:to-[#FBB931] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm mt-8"
                   >
                     {isSavingSetup ? (
                       <><Loader2 className="w-5 h-5 animate-spin" /> Menyimpan Template...</>
@@ -905,19 +896,19 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            ) : currentView === 'dashboard' ? (
+            ) : (currentView === 'dashboard' || currentView === 'landscape') ? (
               /* Dashboard View */
               <div className="space-y-6">
                 
                 {/* Detail Dokumen Form */}
-                <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-6">
+                <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
                   <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Detail Dokumen (Untuk Penamaan File)</h3>
+                    <h3 className="text-lg font-semibold text-white">Detail Dokumen (Untuk Penamaan File)</h3>
                     {locations.length > 0 && (
                       <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Isi dari Lokasi:</label>
+                        <label className="text-sm font-medium text-white/70 whitespace-nowrap">Isi dari Lokasi:</label>
                         <select 
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm w-full md:w-auto"
+                          className="px-3 py-1.5 bg-black/40 border border-white/10 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] text-sm w-full md:w-auto text-[#FFE3B3] appearance-none"
                           onChange={(e) => handleLocationChange(e.target.value)}
                           value={selectedLocationId}
                         >
@@ -931,73 +922,73 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nama Project</label>
+                      <label className="block text-sm font-medium text-white/80 mb-1">Nama Project</label>
                       <input 
                         type="text" 
                         value={projectName} 
                         onChange={e => updateDocDetail('projectName', e.target.value)} 
                         placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nama Klien</label>
+                      <label className="block text-sm font-medium text-white/80 mb-1">Nama Klien</label>
                       <input 
                         type="text" 
                         value={clientName} 
                         onChange={e => updateDocDetail('clientName', e.target.value)} 
                         placeholder="Contoh: Bpk. Budi" 
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Pekan Ke-</label>
+                      <label className="block text-sm font-medium text-white/80 mb-1">Pekan Ke-</label>
                       <div className="flex items-center">
-                        <span className="px-3 py-2 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md text-gray-500">P.</span>
+                        <span className="px-3 py-2 bg-black/40 border border-white/10 border-r-0 rounded-l-md text-white/50">P.</span>
                         <input 
                           type="text" 
                           value={week} 
                           onChange={e => updateDocDetail('week', e.target.value)} 
                           placeholder="1" 
-                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                          className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-r-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Klien / Kantor</label>
+                      <label className="block text-sm font-medium text-white/80 mb-1">Klien / Kantor</label>
                       <select 
                         value={target} 
                         onChange={e => updateDocDetail('target', e.target.value)} 
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] appearance-none"
                       >
-                        <option value="Klien">Klien</option>
-                        <option value="Kantor">Kantor</option>
+                        <option value="Klien" className="bg-[#1a0b02]">Klien</option>
+                        <option value="Kantor" className="bg-[#1a0b02]">Kantor</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Bobot</label>
+                      <label className="block text-sm font-medium text-white/80 mb-1">Bobot</label>
                       <input 
                         type="text" 
                         value={weight} 
                         onChange={e => updateDocDetail('weight', e.target.value)} 
                         placeholder="Contoh: 20%" 
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                       />
                     </div>
                   </div>
-                  <div className="mt-4 p-3 bg-green-50/50 rounded-md border border-green-100">
-                    <p className="text-sm text-green-800">
+                  <div className="mt-4 p-3 bg-white/5 rounded-md border border-white/10">
+                    <p className="text-sm text-[#FBB931]">
                       <strong>Preview Nama File:</strong> {getFilename()}
                     </p>
                   </div>
                 </div>
 
                 {/* Upload Area */}
-                <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
+                <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-8">
                   <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={handleDrop}
-                    className="border-2 border-dashed border-green-300 rounded-xl p-12 text-center bg-white/50 hover:bg-green-50 transition-colors cursor-pointer"
+                    className="border-2 border-dashed border-[#F88F22]/40 rounded-xl p-12 text-center bg-black/20 hover:bg-white/5 transition-colors cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <input
@@ -1008,12 +999,12 @@ export default function App() {
                       className="hidden"
                       multiple
                     />
-                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="w-16 h-16 bg-[#EA6113]/20 text-[#EA6113] rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileUp className="w-8 h-8" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload PDF Document(s)</h3>
-                    <p className="text-gray-500 mb-4">Drag and drop multiple PDFs here, or click to browse. Files will be merged automatically based on their names (e.g. 1.pdf, 2.pdf).</p>
-                    <span className="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                    <h3 className="text-lg font-semibold text-white mb-1">Upload PDF Document(s)</h3>
+                    <p className="text-white/60 mb-4">Drag and drop multiple PDFs here, or click to browse. Files will be merged automatically based on their names (e.g. 1.pdf, 2.pdf).</p>
+                    <span className="inline-flex items-center justify-center px-4 py-2 bg-black/40 border border-white/10 rounded-md text-sm font-medium text-white/80 shadow-sm hover:bg-white/10">
                       Select Files
                     </span>
                   </div>
@@ -1021,20 +1012,20 @@ export default function App() {
 
                 {/* Processing & Result Area */}
                 {(isProcessing || processedPdfUrl) && (
-                  <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-8">
+                  <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-sm border border-[#F88F22]/20 p-8">
                     {isProcessing ? (
                       <div className="flex flex-col items-center justify-center py-12">
-                        <Loader2 className="w-12 h-12 animate-spin text-green-500 mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900">Memproses PDF...</h3>
-                        <p className="text-gray-500">Menerapkan Header, Footer, dan Watermark</p>
+                        <Loader2 className="w-12 h-12 animate-spin text-[#F88F22] mb-4" />
+                        <h3 className="text-lg font-medium text-white">Memproses PDF...</h3>
+                        <p className="text-white/60">Menerapkan Header, Footer, dan Watermark</p>
                       </div>
                     ) : processedPdfUrl ? (
                       <div className="flex flex-col items-center justify-center py-8">
-                        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+                        <div className="w-16 h-16 bg-[#EA6113]/20 text-[#EA6113] rounded-full flex items-center justify-center mb-4">
                           <FileOutput className="w-8 h-8" />
                         </div>
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">PDF Berhasil Diproses!</h3>
-                        <p className="text-gray-500 mb-8 text-center max-w-md">
+                        <h3 className="text-xl font-semibold text-white mb-2">PDF Berhasil Diproses!</h3>
+                        <p className="text-white/60 mb-8 text-center max-w-md">
                           Dokumen Anda telah berhasil diperbarui dan disimpan ke Riwayat.
                         </p>
                         
@@ -1043,14 +1034,14 @@ export default function App() {
                             href={processedPdfUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 px-6 py-3 bg-black/40 border border-white/10 text-white/80 rounded-lg font-medium hover:bg-white/10 transition-colors"
                           >
                             <FileText className="w-5 h-5" />
                             Preview PDF
                           </a>
                           <button
                             onClick={handleDownload}
-                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-lg font-medium hover:from-green-600 hover:to-green-500 shadow-sm"
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white rounded-lg font-medium hover:from-[#F88F22] hover:to-[#FBB931] shadow-sm"
                           >
                             <Download className="w-5 h-5" />
                             Download PDF
@@ -1064,7 +1055,7 @@ export default function App() {
                           </button>
                           <button
                             onClick={handleCopyCaption}
-                            className="flex items-center gap-2 px-6 py-3 bg-white border border-green-300 text-green-700 rounded-lg font-medium hover:bg-green-50 transition-colors shadow-sm"
+                            className="flex items-center gap-2 px-6 py-3 bg-black/40 border border-[#F88F22]/40 text-[#FBB931] rounded-lg font-medium hover:bg-white/10 transition-colors shadow-sm"
                           >
                             <Copy className="w-5 h-5" />
                             Caption
@@ -1077,50 +1068,50 @@ export default function App() {
               </div>
             ) : currentView === 'history' ? (
               /* History View */
-              <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 overflow-hidden">
-                <div className="p-6 border-b border-green-200/50">
-                  <h2 className="text-lg font-semibold text-gray-900">Riwayat Dokumen (Draft)</h2>
-                  <p className="text-sm text-gray-500 mt-1">Dokumen yang telah diproses akan tersimpan di sini secara lokal di browser Anda.</p>
+              <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 overflow-hidden">
+                <div className="p-6 border-b border-white/10">
+                  <h2 className="text-lg font-semibold text-white">Riwayat Dokumen (Draft)</h2>
+                  <p className="text-sm text-white/60 mt-1">Dokumen yang telah diproses akan tersimpan di sini secara lokal di browser Anda.</p>
                 </div>
                 
                 {history.length === 0 ? (
-                  <div className="p-12 text-center text-gray-500">
-                    <History className="w-12 h-12 mx-auto text-green-300 mb-3" />
+                  <div className="p-12 text-center text-white/50">
+                    <History className="w-12 h-12 mx-auto text-white/20 mb-3" />
                     <p>Belum ada riwayat dokumen.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse bg-white/50">
+                    <table className="w-full text-left border-collapse bg-transparent">
                       <thead>
-                        <tr className="bg-green-50/50 border-b border-green-200/50">
-                          <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Nama File</th>
-                          <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Dibuat</th>
-                          <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Aksi</th>
+                        <tr className="bg-black/40 border-b border-white/10">
+                          <th className="px-6 py-4 text-xs font-medium text-white/50 uppercase tracking-wider">Nama File</th>
+                          <th className="px-6 py-4 text-xs font-medium text-white/50 uppercase tracking-wider">Tanggal Dibuat</th>
+                          <th className="px-6 py-4 text-xs font-medium text-white/50 uppercase tracking-wider text-right">Aksi</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-green-200/50">
+                      <tbody className="divide-y divide-white/5">
                         {history.map((item) => (
-                          <tr key={item.id} className="hover:bg-green-50/50 transition-colors">
+                          <tr key={item.id} className="hover:bg-white/5 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
-                                <FileText className="w-5 h-5 text-green-500" />
-                                <span className="font-medium text-gray-900">{item.filename}</span>
+                                <FileText className="w-5 h-5 text-[#F88F22]" />
+                                <span className="font-medium text-white/90">{item.filename}</span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">
                               {formatDate(item.date)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="flex items-center justify-end gap-3">
+                              <div className="flex items-center justify-end gap-4">
                                 <button 
                                   onClick={() => downloadFromHistory(item.id, item.filename)}
-                                  className="text-green-600 hover:text-green-900 flex items-center gap-1"
+                                  className="text-[#FBB931] hover:text-white flex items-center gap-1 transition-colors"
                                 >
                                   <Download className="w-4 h-4" /> Download
                                 </button>
                                 <button 
                                   onClick={() => deleteFromHistory(item.id)}
-                                  className="text-red-600 hover:text-red-900 flex items-center gap-1 ml-4"
+                                  className="text-red-400 hover:text-red-300 flex items-center gap-1 ml-4 transition-colors"
                                 >
                                   <Trash2 className="w-4 h-4" /> Hapus
                                 </button>
@@ -1137,53 +1128,53 @@ export default function App() {
               /* Locations View */
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-900">Kelola Lokasi</h2>
+                  <h2 className="text-xl font-bold text-white">Kelola Lokasi</h2>
                   <button 
                     onClick={() => setShowLocationForm(!showLocationForm)}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-lg font-medium shadow-sm hover:from-green-600 hover:to-green-500"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white rounded-lg font-medium shadow-sm hover:from-[#F88F22] hover:to-[#FBB931] transition-colors"
                   >
                     {showLocationForm ? 'Batal Tambah' : <><Plus className="w-4 h-4" /> Tambah Lokasi</>}
                   </button>
                 </div>
 
                 {showLocationForm && (
-                  <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-green-200/50 p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Tambah Lokasi Baru</h3>
+                  <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
+                    <h3 className="text-lg font-medium text-white mb-4">Tambah Lokasi Baru</h3>
                     <form onSubmit={saveLocation} className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lokasi</label>
+                        <label className="block text-sm font-medium text-white/80 mb-1">Nama Lokasi</label>
                         <input 
                           type="text" 
                           required
                           value={locName} 
                           onChange={e => setLocName(e.target.value)} 
                           placeholder="Pusat Kota" 
-                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                          className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Alamat (Opsional)</label>
+                        <label className="block text-sm font-medium text-white/80 mb-1">Alamat (Opsional)</label>
                         <input 
                           type="text" 
                           value={locAddr} 
                           onChange={e => setLocAddr(e.target.value)} 
                           placeholder="Jl. Raya No. 123" 
-                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                          className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Detail / Deskripsi (Opsional)</label>
+                        <label className="block text-sm font-medium text-white/80 mb-1">Detail / Deskripsi (Opsional)</label>
                         <textarea 
                           value={locDesc} 
                           onChange={e => setLocDesc(e.target.value)} 
                           placeholder="Detail tambahan lokasi ini..." 
                           rows={3}
-                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" 
+                          className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
                         />
                       </div>
                       <div className="flex justify-end gap-3 pt-2">
-                        <button type="button" onClick={() => setShowLocationForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Batal</button>
-                        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-sm">Simpan</button>
+                        <button type="button" onClick={() => setShowLocationForm(false)} className="px-4 py-2 text-white/70 hover:bg-white/10 rounded-md transition-colors">Batal</button>
+                        <button type="submit" className="px-4 py-2 bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white rounded-md hover:from-[#F88F22] hover:to-[#FBB931] shadow-sm transition-colors">Simpan</button>
                       </div>
                     </form>
                   </div>
@@ -1191,26 +1182,26 @@ export default function App() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {locations.length === 0 ? (
-                    <div className="col-span-full p-12 text-center text-gray-500 bg-white/50 backdrop-blur-md rounded-xl border border-green-200/50">
-                      <MapPin className="w-12 h-12 mx-auto text-green-300 mb-3" />
+                    <div className="col-span-full p-12 text-center text-white/50 bg-black/20 backdrop-blur-xl rounded-xl border border-white/10">
+                      <MapPin className="w-12 h-12 mx-auto text-white/20 mb-3" />
                       <p>Belum ada lokasi tersimpan.</p>
                     </div>
                   ) : (
                     locations.map(loc => (
-                      <div key={loc.id} className="bg-white/80 backdrop-blur-md p-6 rounded-xl shadow-sm border border-green-200/50 flex flex-col items-start gap-3 relative group">
-                        <div className="flex items-center gap-3 w-full border-b border-green-100 pb-3">
-                          <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                      <div key={loc.id} className="bg-black/30 backdrop-blur-xl p-6 rounded-xl shadow-lg border border-[#F88F22]/20 flex flex-col items-start gap-3 relative group transition-transform hover:-translate-y-1">
+                        <div className="flex items-center gap-3 w-full border-b border-white/10 pb-3">
+                          <div className="w-10 h-10 rounded-full bg-[#EA6113]/20 text-[#EA6113] flex items-center justify-center shrink-0">
                             <MapPin className="w-5 h-5" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-gray-900 truncate">{loc.name}</h4>
-                            {loc.address && <p className="text-xs text-gray-500 truncate">{loc.address}</p>}
+                            <h4 className="font-semibold text-white truncate">{loc.name}</h4>
+                            {loc.address && <p className="text-xs text-white/50 truncate mt-0.5">{loc.address}</p>}
                           </div>
                         </div>
-                        {loc.description && <p className="text-sm text-gray-600 flex-1">{loc.description}</p>}
+                        {loc.description && <p className="text-sm text-white/70 flex-1">{loc.description}</p>}
                         <button 
                           onClick={() => deleteLocation(loc.id)}
-                          className="mt-2 text-xs flex items-center gap-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 px-2 py-1 rounded"
+                          className="mt-2 text-xs flex items-center gap-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 border border-red-500/30 px-3 py-1.5 rounded-md hover:bg-red-500/20"
                         >
                           <Trash2 className="w-3 h-3" />
                           Hapus Lokasi
@@ -1222,9 +1213,7 @@ export default function App() {
               </div>
             )}
 
-          </div>
         </div>
-      </main>
       </div>
     </div>
   );
