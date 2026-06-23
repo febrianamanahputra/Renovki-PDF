@@ -393,7 +393,14 @@ export default function App() {
     }
   };
 
-  const getFilename = () => {
+  const getFilename = (uploadedFirstFileName?: string) => {
+    if (currentView === 'landscape') {
+      if (uploadedFirstFileName) {
+        const baseName = uploadedFirstFileName.replace(/\.[^/.]+$/, "");
+        return `${baseName} PDF.pdf`;
+      }
+      return 'Landscape_Document_PDF.pdf';
+    }
     const p = projectName.trim() || 'Project';
     const w = week.trim() ? `P.${week.trim()}` : 'P.X';
     const t = `(${target})`;
@@ -445,7 +452,7 @@ export default function App() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+      const files = Array.from(e.target.files).filter((f: File) => f.type === 'application/pdf') as File[];
       if (files.length === 0) {
         setError('Please upload valid PDF files.');
         return;
@@ -458,7 +465,7 @@ export default function App() {
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+      const files = Array.from(e.dataTransfer.files).filter((f: File) => f.type === 'application/pdf') as File[];
       if (files.length === 0) {
         setError('Please upload valid PDF files.');
         return;
@@ -725,7 +732,8 @@ export default function App() {
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       
-      const filename = getFilename();
+      let baseFileName = files.length > 0 ? files[0].name : undefined;
+      const filename = getFilename(baseFileName);
       setGeneratedFilename(filename);
       setProcessedPdfUrl(url);
       setProcessedBlob(blob);
@@ -901,8 +909,9 @@ export default function App() {
               <div className="space-y-6">
                 
                 {/* Detail Dokumen Form */}
-                <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+                {currentView === 'dashboard' && (
+                  <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
                     <h3 className="text-lg font-semibold text-white">Detail Dokumen (Untuk Penamaan File)</h3>
                     {locations.length > 0 && (
                       <div className="flex items-center gap-2">
@@ -982,6 +991,7 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+                )}
 
                 {/* Upload Area */}
                 <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-8">
