@@ -395,7 +395,7 @@ export default function App() {
   const getFilename = () => {
     const p = projectName.trim() || 'Project';
     const calculatedWeek = getWeek(startDate);
-    const w = calculatedWeek ? `P.${calculatedWeek}` : 'P.X';
+    const w = calculatedWeek ? `Pekan ${calculatedWeek}` : 'Pekan X';
     return `${p} ${w}.pdf`;
   };
 
