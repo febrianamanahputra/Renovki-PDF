@@ -144,6 +144,7 @@ export default function App() {
   const [processedPdfUrl, setProcessedPdfUrl] = useState<string | null>(null);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [generatedFilename, setGeneratedFilename] = useState<string>('');
+  const [applyWatermark, setApplyWatermark] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -393,14 +394,7 @@ export default function App() {
     }
   };
 
-  const getFilename = (uploadedFirstFileName?: string) => {
-    if (currentView === 'landscape') {
-      if (uploadedFirstFileName) {
-        const baseName = uploadedFirstFileName.replace(/\.[^/.]+$/, "");
-        return `${baseName} PDF.pdf`;
-      }
-      return 'Landscape_Document_PDF.pdf';
-    }
+  const getFilename = () => {
     const p = projectName.trim() || 'Project';
     const w = week.trim() ? `P.${week.trim()}` : 'P.X';
     const t = `(${target})`;
@@ -484,164 +478,21 @@ export default function App() {
     try {
       const mergedPdf = await PDFDocument.create();
 
-      let pagesToProcess: { pdfDoc: PDFDocument, index: number }[] = [];
+      let pagesToProcess: { pdfDoc: PDFDocument, index: number, isFirstPdf: boolean }[] = [];
 
-      // Cari file berdasarkan nama (menghapus spasi dan .pdf)
-      const getBaseName = (name: string) => name.toLowerCase().replace('.pdf', '').trim();
-      const filePdf = files.find(f => getBaseName(f.name) === 'file' || f.name.toLowerCase().includes('file'));
-      const tsPdf = files.find(f => getBaseName(f.name) === 'ts' || f.name.toLowerCase().includes('ts'));
+      const sortedFiles = [...files].sort((a, b) => 
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      );
 
-      if (files.length === 2 && filePdf && tsPdf && filePdf !== tsPdf) {
-        // --- MODE SPESIFIK: Hapus Page 2 dari "file", ganti dengan isi dari "ts" ---
-        const fileArrayBuf = await filePdf.arrayBuffer();
-        const fileDoc = await PDFDocument.load(fileArrayBuf);
-        
-        const tsArrayBuf = await tsPdf.arrayBuffer();
-        const tsDoc = await PDFDocument.load(tsArrayBuf);
-
-        const fileIndices = fileDoc.getPageIndices();
-        const tsIndices = tsDoc.getPageIndices();
-        
-        for (let i = 0; i < fileIndices.length; i++) {
-          if (i === 1) { 
-            // Halaman 2 (index 1) dari file dihapus/digantikan dengan seluruh pdf TS
-            for (const j of tsIndices) {
-              pagesToProcess.push({ pdfDoc: tsDoc, index: j });
-            }
-          } else {
-            pagesToProcess.push({ pdfDoc: fileDoc, index: i });
-          }
-        }
-      } else {
-        // --- MODE NORMAL: Gabung semua urut berdasarkan nama ---
-        const sortedFiles = [...files].sort((a, b) => 
-          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-        );
-
-        for (const file of sortedFiles) {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdfDoc = await PDFDocument.load(arrayBuffer);
-          const indices = pdfDoc.getPageIndices();
-          for (const index of indices) {
-            pagesToProcess.push({ pdfDoc, index });
-          }
+      for (let i = 0; i < sortedFiles.length; i++) {
+        const file = sortedFiles[i];
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        const indices = pdfDoc.getPageIndices();
+        for (const index of indices) {
+          pagesToProcess.push({ pdfDoc, index, isFirstPdf: i === 0 });
         }
       }
-
-      let globalPageIndex = 0;
-
-      for (const { pdfDoc, index } of pagesToProcess) {
-        globalPageIndex++;
-        // Halaman ke-2 selalu landscape, sisanya portrait
-        const isTargetLandscape = (globalPageIndex === 2);
-
-        const page = pdfDoc.getPage(index);
-        const angle = page.getRotation().angle;
-
-          const embeddedPage = await mergedPdf.embedPage(page);
-          const dims = embeddedPage.scale(1);
-
-          const isVisuallyLandscape = (angle === 90 || angle === 270) 
-              ? dims.height > dims.width 
-              : dims.width > dims.height;
-
-          const visualWidth = (angle === 90 || angle === 270) ? dims.height : dims.width;
-          const visualHeight = (angle === 90 || angle === 270) ? dims.width : dims.height;
-
-          const A4_W = 595.28;
-          const A4_H = 841.89;
-
-          let finalWidth, finalHeight;
-          let additionalRotation = 0;
-          let shouldCenterAndFit = true;
-
-          if (isTargetLandscape) {
-              // Ukuran kertas dipaksa landscape A4
-              finalWidth = A4_H;
-              finalHeight = A4_W;
-              
-              // Putar tabel agar selaras dan mengisi ruang landscape dengan optimal
-              if (!isVisuallyLandscape) {
-                  additionalRotation = 270 + 90; // Putar tambahan 90 derajat dari sebelumnya (270)
-              } else {
-                  additionalRotation = 90; // Putar tambahan 90 derajat dari sebelumnya (0)
-              }
-          } else {
-              // Ukuran kertas dipaksa portrait A4
-              finalWidth = A4_W;
-              finalHeight = A4_H;
-              if (isVisuallyLandscape) {
-                  additionalRotation = 270;
-              } else {
-                  additionalRotation = 0;
-              }
-          }
-
-          const totalRotation = angle + additionalRotation;
-          const normalizedRotation = ((totalRotation % 360) + 360) % 360;
-
-          const newPage = mergedPdf.addPage([finalWidth, finalHeight]);
-          
-          let tx = 0, ty = 0;
-          let drawW = dims.width;
-          let drawH = dims.height;
-
-          if (shouldCenterAndFit) {
-              const contentVisualWidth = (normalizedRotation === 90 || normalizedRotation === 270) ? dims.height : dims.width;
-              const contentVisualHeight = (normalizedRotation === 90 || normalizedRotation === 270) ? dims.width : dims.height;
-
-              // Scale to fit finalWidth and finalHeight (keep aspect ratio)
-              let scale = Math.min(finalWidth / contentVisualWidth, finalHeight / contentVisualHeight);
-              
-              if (isTargetLandscape) {
-                  // Perbesar 2 kali lipat khusus untuk page landscape
-                  scale *= 2.0;
-              }
-              
-              drawW = dims.width * scale;
-              drawH = dims.height * scale;
-              
-              const scaledVisualWidth = contentVisualWidth * scale;
-              const scaledVisualHeight = contentVisualHeight * scale;
-
-              if (normalizedRotation === 0) {
-                  tx = (finalWidth - scaledVisualWidth) / 2;
-                  ty = (finalHeight - scaledVisualHeight) / 2;
-              } else if (normalizedRotation === 90) {
-                  tx = (finalWidth - scaledVisualWidth) / 2 + scaledVisualWidth;
-                  ty = (finalHeight - scaledVisualHeight) / 2;
-              } else if (normalizedRotation === 180) {
-                  tx = (finalWidth - scaledVisualWidth) / 2 + scaledVisualWidth;
-                  ty = (finalHeight - scaledVisualHeight) / 2 + scaledVisualHeight;
-              } else if (normalizedRotation === 270) {
-                  tx = (finalWidth - scaledVisualWidth) / 2;
-                  ty = (finalHeight - scaledVisualHeight) / 2 + scaledVisualHeight;
-              }
-          } else {
-              if (normalizedRotation === 0) {
-                  tx = 0; ty = 0;
-              } else if (normalizedRotation === 90) {
-                  tx = finalWidth; ty = 0;
-              } else if (normalizedRotation === 180) {
-                  tx = finalWidth; ty = finalHeight;
-              } else if (normalizedRotation === 270) {
-                  tx = 0; ty = finalHeight;
-              }
-          }
-          
-          if (shouldCenterAndFit && isTargetLandscape) {
-              // Buat turun 20% dari posisi terakhir 30%, jadi total turun 50%
-              ty -= finalHeight * 0.5;
-          }
-
-          newPage.drawPage(embeddedPage, {
-              x: tx,
-              y: ty,
-              width: drawW,
-              height: drawH,
-              rotate: degrees(normalizedRotation)
-          });
-        }
 
       const fetchImage = async (dataUrl: string) => {
         const res = await fetch(dataUrl);
@@ -660,16 +511,7 @@ export default function App() {
       const embeddedFooter = isFooterPng ? await mergedPdf.embedPng(footerBytes) : await mergedPdf.embedJpg(footerBytes);
       const embeddedWatermark = isWatermarkPng ? await mergedPdf.embedPng(watermarkBytes) : await mergedPdf.embedJpg(watermarkBytes);
 
-      const pages = mergedPdf.getPages();
-
-      let pWidth = 595.28, pHeight = 841.89;
-      if (pages.length > 0) {
-          const s = pages[0].getSize();
-          pWidth = Math.min(s.width, s.height);
-          pHeight = Math.max(s.width, s.height);
-      }
-      const landscapeRatio = pHeight / pWidth;
-
+      const landscapeRatio = 841.89 / 595.28;
       const lsHeaderDataUrl = await generateLandscapeTemplate(templates.header, landscapeRatio);
       const lsFooterDataUrl = await generateLandscapeTemplate(templates.footer, landscapeRatio);
 
@@ -679,53 +521,77 @@ export default function App() {
       const embeddedLsHeader = await mergedPdf.embedPng(lsHeaderBytes);
       const embeddedLsFooter = await mergedPdf.embedPng(lsFooterBytes);
 
-      for (const page of pages) {
-        const { width, height } = page.getSize();
-        const isLandscape = currentView === 'landscape' ? true : width > height;
-        
-        const currentHeader = isLandscape ? embeddedLsHeader : embeddedHeader;
-        const currentFooter = isLandscape ? embeddedLsFooter : embeddedFooter;
+      for (const { pdfDoc, index, isFirstPdf } of pagesToProcess) {
+        const [copiedPage] = await mergedPdf.copyPages(pdfDoc, [index]);
+        mergedPdf.addPage(copiedPage);
 
-        // Header
-        const headerDims = currentHeader.scale(1);
-        const headerScale = width / headerDims.width;
-        // Mengurangi tinggi header sebesar 20% (dikali 0.8) agar lebih pendek
-        const scaledHeaderHeight = (headerDims.height * headerScale) * 0.8;
-        page.drawImage(currentHeader, {
-          x: 0,
-          y: height - scaledHeaderHeight,
-          width: width,
-          height: scaledHeaderHeight,
-        });
+        // PDF Pertama Normal, PDF Ke-2 dst Rotasi Kekanan (90 derajat)
+        if (!isFirstPdf) {
+          const currentAngle = copiedPage.getRotation().angle;
+          copiedPage.setRotation(degrees(currentAngle + 90));
+        }
 
-        // Footer
-        const footerDims = currentFooter.scale(1);
-        const footerScale = width / footerDims.width;
-        // Mengurangi tinggi footer sebesar 20% (dikali 0.8) agar lebih pendek
-        const scaledFooterHeight = (footerDims.height * footerScale) * 0.8;
-        page.drawImage(currentFooter, {
-          x: 0,
-          y: 0,
-          width: width,
-          height: scaledFooterHeight,
-        });
+        if (applyWatermark) {
+          const { width, height } = copiedPage.getSize();
+          
+          // Memperhitungkan rotasi visual
+          const currentRotation = copiedPage.getRotation().angle;
+          const isLandscapeVisual = currentRotation === 90 || currentRotation === 270;
+          
+          const visualWidth = isLandscapeVisual ? height : width;
+          const visualHeight = isLandscapeVisual ? width : height;
+          
+          // Tentukan template berdasarkan proporsi halaman
+          const isLandscapeProp = visualWidth > visualHeight;
+          const currentHeader = isLandscapeProp ? embeddedLsHeader : embeddedHeader;
+          const currentFooter = isLandscapeProp ? embeddedLsFooter : embeddedFooter;
 
-        // Watermark
-        const wmDims = embeddedWatermark.scale(1);
-        const maxWmWidth = width * 0.6;
-        const maxWmHeight = height * 0.6;
-        const wmScale = Math.min(maxWmWidth / wmDims.width, maxWmHeight / wmDims.height);
-        const scaledWmWidth = wmDims.width * wmScale;
-        const scaledWmHeight = wmDims.height * wmScale;
-        
-        page.drawImage(embeddedWatermark, {
-          x: width / 2 - scaledWmWidth / 2,
-          y: height / 2 - scaledWmHeight / 2,
-          width: scaledWmWidth,
-          height: scaledWmHeight,
-          opacity: 0.15,
-          blendMode: BlendMode.Multiply,
-        });
+          // Dalam pdf-lib, kordinat origin selalu di kiri bawah dari halaman yang unrotated.
+          // Jadi kita harus menggambar mengikuti ukuran visual, lalu putar & geser agar sesuai.
+          
+          copiedPage.pushOperators(
+             // Opsional: Jika transformasi manual diperlukan
+          );
+          
+          // Header
+          const headerDims = currentHeader.scale(1);
+          const headerScale = width / headerDims.width;
+          const scaledHeaderHeight = (headerDims.height * headerScale) * 0.8;
+          copiedPage.drawImage(currentHeader, {
+            x: 0,
+            y: height - scaledHeaderHeight,
+            width: width,
+            height: scaledHeaderHeight,
+          });
+
+          // Footer
+          const footerDims = currentFooter.scale(1);
+          const footerScale = width / footerDims.width;
+          const scaledFooterHeight = (footerDims.height * footerScale) * 0.8;
+          copiedPage.drawImage(currentFooter, {
+            x: 0,
+            y: 0,
+            width: width,
+            height: scaledFooterHeight,
+          });
+
+          // Watermark
+          const wmDims = embeddedWatermark.scale(1);
+          const maxWmWidth = width * 0.6;
+          const maxWmHeight = height * 0.6;
+          const wmScale = Math.min(maxWmWidth / wmDims.width, maxWmHeight / wmDims.height);
+          const scaledWmWidth = wmDims.width * wmScale;
+          const scaledWmHeight = wmDims.height * wmScale;
+          
+          copiedPage.drawImage(embeddedWatermark, {
+            x: width / 2 - scaledWmWidth / 2,
+            y: height / 2 - scaledWmHeight / 2,
+            width: scaledWmWidth,
+            height: scaledWmHeight,
+            opacity: 0.15,
+            blendMode: BlendMode.Multiply,
+          });
+        }
       }
 
       const pdfBytes = await mergedPdf.save();
@@ -733,7 +599,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       
       let baseFileName = files.length > 0 ? files[0].name : undefined;
-      const filename = getFilename(baseFileName);
+      const filename = getFilename();
       setGeneratedFilename(filename);
       setProcessedPdfUrl(url);
       setProcessedBlob(blob);
@@ -904,77 +770,76 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            ) : (currentView === 'dashboard' || currentView === 'landscape') ? (
+            ) : (currentView === 'dashboard') ? (
               /* Dashboard View */
               <div className="space-y-6">
                 
                 {/* Detail Dokumen Form */}
-                {currentView === 'dashboard' && (
-                  <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
-                    <h3 className="text-lg font-semibold text-white">Detail Dokumen (Untuk Penamaan File)</h3>
-                    {locations.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-white/70 whitespace-nowrap">Isi dari Lokasi:</label>
-                        <select 
-                          className="px-3 py-1.5 bg-black/40 border border-white/10 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] text-sm w-full md:w-auto text-[#FFE3B3] appearance-none"
-                          onChange={(e) => handleLocationChange(e.target.value)}
-                          value={selectedLocationId}
-                        >
-                          <option value="">-- Pilih Lokasi --</option>
-                          {locations.map(loc => (
-                            <option key={loc.id} value={loc.id}>{loc.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-1">Nama Project</label>
-                      <input 
-                        type="text" 
-                        value={projectName} 
-                        onChange={e => updateDocDetail('projectName', e.target.value)} 
-                        placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
-                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-1">Nama Klien</label>
-                      <input 
-                        type="text" 
-                        value={clientName} 
-                        onChange={e => updateDocDetail('clientName', e.target.value)} 
-                        placeholder="Contoh: Bpk. Budi" 
-                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-1">Pekan Ke-</label>
-                      <div className="flex items-center">
-                        <span className="px-3 py-2 bg-black/40 border border-white/10 border-r-0 rounded-l-md text-white/50">P.</span>
-                        <input 
-                          type="text" 
-                          value={week} 
-                          onChange={e => updateDocDetail('week', e.target.value)} 
-                          placeholder="1" 
-                          className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-r-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-1">Klien / Kantor</label>
+                <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+                  <h3 className="text-lg font-semibold text-white">Detail Dokumen (Untuk Penamaan File)</h3>
+                  {locations.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-white/70 whitespace-nowrap">Isi dari Lokasi:</label>
                       <select 
-                        value={target} 
-                        onChange={e => updateDocDetail('target', e.target.value)} 
-                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] appearance-none"
+                        className="px-3 py-1.5 bg-black/40 border border-white/10 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] text-sm w-full md:w-auto text-[#FFE3B3] appearance-none"
+                        onChange={(e) => handleLocationChange(e.target.value)}
+                        value={selectedLocationId}
                       >
-                        <option value="Klien" className="bg-[#1a0b02]">Klien</option>
-                        <option value="Kantor" className="bg-[#1a0b02]">Kantor</option>
+                        <option value="">-- Pilih Lokasi --</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        ))}
                       </select>
                     </div>
-                    <div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white/80 mb-1">Nama Project</label>
+                    <input 
+                      type="text" 
+                      value={projectName} 
+                      onChange={e => updateDocDetail('projectName', e.target.value)} 
+                      placeholder="Contoh: Renovasi Rumah Bpk. Budi" 
+                      className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/80 mb-1">Nama Klien</label>
+                    <input 
+                      type="text" 
+                      value={clientName} 
+                      onChange={e => updateDocDetail('clientName', e.target.value)} 
+                      placeholder="Contoh: Bpk. Budi" 
+                      className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/80 mb-1">Pekan Ke-</label>
+                    <div className="flex items-center">
+                      <span className="px-3 py-2 bg-black/40 border border-white/10 border-r-0 rounded-l-md text-white/50">P.</span>
+                      <input 
+                        type="text" 
+                        value={week} 
+                        onChange={e => updateDocDetail('week', e.target.value)} 
+                        placeholder="1" 
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-r-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/80 mb-1">Klien / Kantor</label>
+                    <select 
+                      value={target} 
+                      onChange={e => updateDocDetail('target', e.target.value)} 
+                      className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] appearance-none"
+                    >
+                      <option value="Klien" className="bg-[#1a0b02]">Klien</option>
+                      <option value="Kantor" className="bg-[#1a0b02]">Kantor</option>
+                    </select>
+                  </div>
+                  <div>
                       <label className="block text-sm font-medium text-white/80 mb-1">Bobot</label>
                       <input 
                         type="text" 
@@ -991,7 +856,22 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-                )}
+
+                {/* Watermark Checkbox */}
+                <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={applyWatermark}
+                      onChange={(e) => setApplyWatermark(e.target.checked)}
+                      className="w-5 h-5 rounded border-white/20 bg-black/40 text-[#EA6113] focus:ring-[#F88F22] cursor-pointer"
+                    />
+                    <span className="text-white font-medium">Gunakan Template (Header, Footer, Watermark)</span>
+                  </label>
+                  {!applyWatermark && (
+                    <p className="text-sm text-white/50 mt-2 ml-8">PDF hanya akan digabungkan dan diputar kekanan mulai dari file kedua.</p>
+                  )}
+                </div>
 
                 {/* Upload Area */}
                 <div className="bg-black/30 backdrop-blur-xl rounded-xl shadow-lg border border-[#F88F22]/20 p-8">
