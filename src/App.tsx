@@ -22,10 +22,12 @@ interface LocationMeta {
   address: string;
   docDetails?: {
     projectName: string;
-    week: string;
-    target: string;
-    weight: string;
+    startDate?: string;
     clientName?: string;
+    // old fields
+    week?: string;
+    target?: string;
+    weight?: string;
   };
 }
 
@@ -114,7 +116,7 @@ const generateLandscapeTemplate = (dataUrl: string, ratio: number): Promise<stri
 export default function App() {
   const [templates, setTemplates] = useState<Templates | null>(null);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'locations' | 'landscape'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'locations'>('dashboard');
   
   // Setup State
   const [setupHeader, setSetupHeader] = useState<File | null>(null);
@@ -133,10 +135,20 @@ export default function App() {
 
   // Document Detail State (Filename generation)
   const [projectName, setProjectName] = useState(() => localStorage.getItem('renovki_projectName') || '');
-  const [week, setWeek] = useState(() => localStorage.getItem('renovki_week') || '');
-  const [target, setTarget] = useState(() => localStorage.getItem('renovki_target') || 'Klien');
-  const [weight, setWeight] = useState(() => localStorage.getItem('renovki_weight') || '');
+  const [startDate, setStartDate] = useState(() => localStorage.getItem('renovki_startDate') || '');
   const [clientName, setClientName] = useState(() => localStorage.getItem('renovki_clientName') || '');
+
+  const getWeek = (start: string) => {
+    if (!start) return '';
+    const startDateObj = new Date(start);
+    if (isNaN(startDateObj.getTime())) return '';
+    const now = new Date();
+    const diffTime = now.getTime() - startDateObj.getTime();
+    if (diffTime < 0) return '1';
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const weekNumber = Math.floor(diffDays / 7) + 1;
+    return weekNumber.toString();
+  };
 
   // App State
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -173,9 +185,7 @@ export default function App() {
             const loc = locs.find(l => l.id === savedLocId);
             if (loc && loc.docDetails) {
                setProjectName(loc.docDetails.projectName);
-               setWeek(loc.docDetails.week);
-               setTarget(loc.docDetails.target);
-               setWeight(loc.docDetails.weight);
+               setStartDate(loc.docDetails.startDate || '');
                setClientName(loc.docDetails.clientName || '');
             }
         }
@@ -199,9 +209,7 @@ export default function App() {
       address: locAddr,
       docDetails: {
         projectName: locName,
-        week: '',
-        target: 'Klien',
-        weight: '',
+        startDate: '',
         clientName: ''
       }
     };
@@ -230,11 +238,9 @@ export default function App() {
     }
   };
 
-  const updateDocDetail = (field: 'projectName' | 'week' | 'target' | 'weight' | 'clientName', value: string) => {
+  const updateDocDetail = (field: 'projectName' | 'startDate' | 'clientName', value: string) => {
     if (field === 'projectName') setProjectName(value);
-    if (field === 'week') setWeek(value);
-    if (field === 'target') setTarget(value);
-    if (field === 'weight') setWeight(value);
+    if (field === 'startDate') setStartDate(value);
     if (field === 'clientName') setClientName(value);
 
     if (!selectedLocationId) {
@@ -246,9 +252,7 @@ export default function App() {
               ...loc,
               docDetails: {
                 projectName: loc.docDetails?.projectName ?? loc.name,
-                week: loc.docDetails?.week ?? '',
-                target: loc.docDetails?.target ?? 'Klien',
-                weight: loc.docDetails?.weight ?? '',
+                startDate: loc.docDetails?.startDate ?? '',
                 clientName: loc.docDetails?.clientName ?? '',
                 [field]: value
               }
@@ -267,9 +271,7 @@ export default function App() {
     
     if (!locId) {
        setProjectName(localStorage.getItem('renovki_projectName') || '');
-       setWeek(localStorage.getItem('renovki_week') || '');
-       setTarget(localStorage.getItem('renovki_target') || 'Klien');
-       setWeight(localStorage.getItem('renovki_weight') || '');
+       setStartDate(localStorage.getItem('renovki_startDate') || '');
        setClientName(localStorage.getItem('renovki_clientName') || '');
        return;
     }
@@ -278,15 +280,11 @@ export default function App() {
     if (loc) {
        // load from loc details or default it to loc.name
        const p = loc.docDetails?.projectName ?? loc.name;
-       const w = loc.docDetails?.week ?? '';
-       const t = loc.docDetails?.target ?? 'Klien';
-       const wg = loc.docDetails?.weight ?? '';
+       const s = loc.docDetails?.startDate ?? '';
        const c = loc.docDetails?.clientName ?? '';
        
        setProjectName(p);
-       setWeek(w);
-       setTarget(t);
-       setWeight(wg);
+       setStartDate(s);
        setClientName(c);
     }
   };
@@ -396,14 +394,14 @@ export default function App() {
 
   const getFilename = () => {
     const p = projectName.trim() || 'Project';
-    const w = week.trim() ? `P.${week.trim()}` : 'P.X';
-    const t = `(${target})`;
-    const b = weight.trim() ? `Bobot ${weight.trim()}` : 'Bobot X';
-    return `${p} ${w} ${t} ${b}.pdf`;
+    const calculatedWeek = getWeek(startDate);
+    const w = calculatedWeek ? `P.${calculatedWeek}` : 'P.X';
+    return `${p} ${w}.pdf`;
   };
 
   const getCaptionText = () => {
-    return `Bismillah, Tabe ${clientName ? clientName : '[Nama Klien]'}\nBerikut Laporan Progress Pekanan\nProject ${projectName ? projectName : '[Nama Project]'} Pekan Ke ${week ? week : '[Nomor Pekan]'}`;
+    const calculatedWeek = getWeek(startDate);
+    return `Bismillah, Tabe ${clientName ? clientName : '[Nama Klien]'}\nBerikut Laporan Progress Pekanan\nProject ${projectName ? projectName : '[Nama Project]'} Pekan Ke ${calculatedWeek ? calculatedWeek : '[Nomor Pekan]'}`;
   };
 
   const handleCopyCaption = async () => {
@@ -674,13 +672,6 @@ export default function App() {
             Dashboard
           </button>
           <button 
-            onClick={() => setCurrentView('landscape')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'landscape' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
-          >
-            <ImageIcon className="w-4 h-4" />
-            Landscape Mode
-          </button>
-          <button 
             onClick={() => setCurrentView('locations')}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all ${currentView === 'locations' ? 'bg-gradient-to-r from-[#EA6113] to-[#F88F22] text-white shadow-[0_4px_20px_rgba(234,97,19,0.4)]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
           >
@@ -794,7 +785,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-white/80 mb-1">Nama Project</label>
                     <input 
@@ -816,39 +807,15 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white/80 mb-1">Pekan Ke-</label>
-                    <div className="flex items-center">
-                      <span className="px-3 py-2 bg-black/40 border border-white/10 border-r-0 rounded-l-md text-white/50">P.</span>
-                      <input 
-                        type="text" 
-                        value={week} 
-                        onChange={e => updateDocDetail('week', e.target.value)} 
-                        placeholder="1" 
-                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-r-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
-                      />
-                    </div>
+                    <label className="block text-sm font-medium text-white/80 mb-1">Tanggal Mulai Project</label>
+                    <input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={e => updateDocDetail('startDate', e.target.value)} 
+                      className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] [color-scheme:dark]" 
+                    />
+                    <p className="text-xs text-white/50 mt-1">Pekan saat ini: {getWeek(startDate) ? `Ke-${getWeek(startDate)}` : '-'}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white/80 mb-1">Klien / Kantor</label>
-                    <select 
-                      value={target} 
-                      onChange={e => updateDocDetail('target', e.target.value)} 
-                      className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22] appearance-none"
-                    >
-                      <option value="Klien" className="bg-[#1a0b02]">Klien</option>
-                      <option value="Kantor" className="bg-[#1a0b02]">Kantor</option>
-                    </select>
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-white/80 mb-1">Bobot</label>
-                      <input 
-                        type="text" 
-                        value={weight} 
-                        onChange={e => updateDocDetail('weight', e.target.value)} 
-                        placeholder="Contoh: 20%" 
-                        className="w-full px-3 py-2 bg-black/20 border border-white/10 text-[#FFE3B3] placeholder-white/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#F88F22]" 
-                      />
-                    </div>
                   </div>
                   <div className="mt-4 p-3 bg-white/5 rounded-md border border-white/10">
                     <p className="text-sm text-[#FBB931]">
